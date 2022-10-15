@@ -13,7 +13,6 @@ near-sdk = "4.0.0"
 thiserror = "1.0.26"
 
 [dev-dependencies]
-near-primitives = { git = "https://github.com/nearprotocol/nearcore.git" }
 near-units = "0.2.0"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 tokio = { version = "1.18.1", features = ["full"] }
