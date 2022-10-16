@@ -9,4 +9,8 @@ pub enum MetaDaoError {
     InvalidAdminCall,
     #[error("Unable to create a new epoch, while previous epoch is still ongoing")]
     UnableToCreatNewEpoch,
+    #[error("Creator is not registered for current epoch")]
+    CreatorIsNotRegistered,
+    #[error("Invalid current epoch")]
+    InvalidCurrentEpoch,
 }

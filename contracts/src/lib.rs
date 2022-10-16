@@ -3,10 +3,14 @@ use near_sdk::collections::LookupMap;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 use std::collections::HashMap;
+use std::hash::Hash;
 
 use crate::error::MetaDaoError;
 
 mod error;
+mod nft;
+mod token_receiver;
+mod views;
 
 pub type CreatorAccountId = AccountId;
 pub type UserAccountId = AccountId;
@@ -42,7 +46,10 @@ pub struct MetaDaoContract {
     pub creator_votes_mapping: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<UserAccountId>>>,
     pub creator_funds: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<TokenAmount>>>,
     pub user_funding: LookupMap<Epoch, HashMap<UserAccountId, TokenAmount>>,
+    pub creator_obtained_funds: LookupMap<Epoch, HashMap<UserAccountId, bool>>,
     pub is_epoch_on: bool,
+    pub in_minting: bool,
+    pub in_funding: bool,
 }
 
 #[near_bindgen]
@@ -60,6 +67,9 @@ impl MetaDaoContract {
         let user_funding =
             LookupMap::<Epoch, HashMap<UserAccountId, TokenAmount>>::new(b"d".to_vec());
 
+        let creator_obtained_funds =
+            LookupMap::<Epoch, HashMap<CreatorAccountId, bool>>::new(b"e".to_vec());
+
         Self {
             admin,
             epoch: Epoch(0u16),
@@ -67,7 +77,10 @@ impl MetaDaoContract {
             creator_votes_mapping,
             creator_funds,
             user_funding,
+            creator_obtained_funds,
             is_epoch_on: false,
+            in_minting: false,
+            in_funding: false,
         }
     }
 
@@ -85,8 +98,10 @@ impl MetaDaoContract {
         self.epoch.next_epoch();
 
         // create new entries for other contract fields, for new epoch
-        self.user_votes_mapping
-            .insert(&self.epoch, &HashMap::<UserAccountId, CreatorAccountId>::new());
+        self.user_votes_mapping.insert(
+            &self.epoch,
+            &HashMap::<UserAccountId, CreatorAccountId>::new(),
+        );
         self.creator_votes_mapping.insert(
             &self.epoch,
             &HashMap::<CreatorAccountId, Vec<UserAccountId>>::new(),
