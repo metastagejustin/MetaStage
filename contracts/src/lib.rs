@@ -8,8 +8,8 @@ use std::hash::Hash;
 use crate::error::MetaDaoError;
 
 mod error;
-mod token_receiver;
 mod nft;
+mod token_receiver;
 mod views;
 
 pub type CreatorAccountId = AccountId;
@@ -46,8 +46,10 @@ pub struct MetaDaoContract {
     pub creator_votes_mapping: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<UserAccountId>>>,
     pub creator_funds: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<TokenAmount>>>,
     pub user_funding: LookupMap<Epoch, HashMap<UserAccountId, TokenAmount>>,
-    pub is_epoch_on: bool,
     pub creator_obtained_funds: LookupMap<Epoch, HashMap<UserAccountId, bool>>,
+    pub is_epoch_on: bool,
+    pub in_minting: bool,
+    pub in_funding: bool,
 }
 
 #[near_bindgen]
@@ -75,8 +77,10 @@ impl MetaDaoContract {
             creator_votes_mapping,
             creator_funds,
             user_funding,
-            is_epoch_on: false,
             creator_obtained_funds,
+            is_epoch_on: false,
+            in_minting: false,
+            in_funding: false,
         }
     }
 
