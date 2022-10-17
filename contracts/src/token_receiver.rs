@@ -24,5 +24,7 @@ impl FungibleTokenReceiver for MetaDaoContract {
                 .as_str(),
             );
         }
+
+        let metadata = msg.split("_").collect::<Vec<_>>();
     }
 }
