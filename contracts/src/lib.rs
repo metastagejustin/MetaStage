@@ -1,5 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::LookupMap;
+use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 use std::collections::HashMap;
@@ -42,11 +42,12 @@ pub struct TokenAmount {
 pub struct MetaDaoContract {
     pub admin: AccountId, // TODO: can we do it without an admin ?
     pub epoch: Epoch,
-    pub user_votes_mapping: LookupMap<Epoch, HashMap<UserAccountId, CreatorAccountId>>,
+    pub user_votes_mapping: LookupMap<Epoch, HashMap<UserAccountId, Vec<CreatorAccountId>>>,
     pub creator_votes_mapping: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<UserAccountId>>>,
     pub creator_funds: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<TokenAmount>>>,
     pub user_funding: LookupMap<Epoch, HashMap<UserAccountId, TokenAmount>>,
     pub creator_obtained_funds: LookupMap<Epoch, HashMap<UserAccountId, bool>>,
+    pub creator_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
     pub is_epoch_on: bool,
     pub in_minting: bool,
     pub in_funding: bool,
@@ -57,7 +58,7 @@ impl MetaDaoContract {
     #[init]
     pub fn new(admin: AccountId) -> Self {
         let user_votes_mapping =
-            LookupMap::<Epoch, HashMap<UserAccountId, CreatorAccountId>>::new(b"a".to_vec());
+            LookupMap::<Epoch, HashMap<UserAccountId, Vec<CreatorAccountId>>>::new(b"a".to_vec());
         let creator_votes_mapping =
             LookupMap::<Epoch, HashMap<CreatorAccountId, Vec<UserAccountId>>>::new(b"b".to_vec());
 
@@ -70,6 +71,8 @@ impl MetaDaoContract {
         let creator_obtained_funds =
             LookupMap::<Epoch, HashMap<CreatorAccountId, bool>>::new(b"e".to_vec());
 
+        let creator_per_epoch_set = UnorderedMap::<Epoch, UnorderedSet<CreatorAccountId>>::new(b"f".to_vec());
+
         Self {
             admin,
             epoch: Epoch(0u16),
@@ -81,6 +84,7 @@ impl MetaDaoContract {
             is_epoch_on: false,
             in_minting: false,
             in_funding: false,
+            creator_per_epoch_set,
         }
     }
 
@@ -100,7 +104,7 @@ impl MetaDaoContract {
         // create new entries for other contract fields, for new epoch
         self.user_votes_mapping.insert(
             &self.epoch,
-            &HashMap::<UserAccountId, CreatorAccountId>::new(),
+            &HashMap::<UserAccountId, Vec<CreatorAccountId>>::new(),
         );
         self.creator_votes_mapping.insert(
             &self.epoch,
@@ -115,5 +119,68 @@ impl MetaDaoContract {
         self.is_epoch_on = true;
 
         Ok(())
+    }
+
+    #[payable]
+    #[private]
+    #[handle_result]
+    fn register_user(&mut self, creator_account_id: CreatorAccountId, nft_rank: NFTRanking) -> Result<(), MetaDaoError> {
+        // TODO: refactor this
+        if env::attached_deposit() < 1 {
+            return Err(MetadataoError::UserDidNotAttachEnoughFunds);
+        }
+
+        if !self.is_epoch_on {
+            return Err(MetaDaoError::EpochIsOff);
+        }
+
+        if !self.in_funding {
+            return Err(MetaDaoError::NotInFundingPeriod);
+        }
+
+        if !self.creator_per_epoch_set.contains(&self.epoch) {
+            return Err(MetaDaoError::CreatorIsNotRegistered);
+        }
+
+        let user_id = env::predecessor_account_id();
+
+        let mut creator_votes_mapping = self.creator_votes_mapping.get(&self.epoch).ok_or(MetaDaoError::InvalidCurrentEpoch)?;
+        let mut creator_votes = creator_votes_mapping.get(&creator_account_id);
+
+        match creator_votes {
+            None => {
+                let users = vec![user_id];
+                creator_votes_mapping.insert(creator_account_id.clone(), users);
+                self.creator_votes_mapping.insert(&self.epoch, &creator_votes_mapping);
+            },
+            Some(cv) => {
+                if creator_votes.contains(user_id.clone()) {
+                    return Err(MetaDaoError::UserAlreadyRegisteredFundsToCreator);
+                }
+                users.push(user_id.clone());
+                creator_votes.insert(user_id, users);
+                self.creator_votes_mapping.insert(&self.epoch, &creator_votes_mapping);
+            }
+        }
+
+        let mut user_votes_mapping = self.user_votes_mapping.get(&self.epoch).ok_or(MetaDaoError::InvalidCurrentEpoch)?;
+        let mut user_votes = user_votes_mapping.get(&user_id);
+
+        match user_votes {
+            None => {
+                let creators = vec![creator_account_id.clone()];
+                user_votes_mapping.insert(user_id.clone(), creators);
+                self.user_votes_mapping.insert(&self.epoch, user_votes_mapping);
+            },
+            Some(uv) => {
+                if uv.contains(creator_id.clone()) {
+                    return Err(MetaDaoError::UserAlreadyRegisteredFundsToCreator);
+                }
+                uv.push(creator_id.clone());
+                user_votes_mapping.insert(user_id.clone(), uv);
+                self.user_votes_mapping.insert(&self.epoch, &user_votes_mapping);
+            }
+        }
+
     }
 }
