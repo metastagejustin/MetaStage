@@ -89,6 +89,37 @@ impl MetaDaoContract {
     }
 
     #[handle_result]
+    fn set_funding(&mut self) -> Result<(), MetaDaoError> {
+        if env::predecessor_account_id() != self.admin {
+            return Err(MetaDaoError::InvalidAdminCall);
+        }
+
+        if self.in_funding {
+            return Err(MetaDaoError::AlreadyInFunding);
+        }
+
+        if !self.in_minting {
+            return Err(MetaDaoError::NotInMintingPeriod);
+        }
+
+        self.in_minting = false;
+        self.in_funding = true;
+    }
+
+    #[handle_result]
+    fn set_minting(&mut self) -> Result<(), MetaDaoError> {
+        if env::predecessor_account_id() != self.admin {
+            return Err(MetaDaoError::InvalidAdminCall);
+        }
+
+        if self.in_minting {
+            return Err(MetaDaoError::AlreadyInMinting);
+        }
+
+        self.in_minting = true;
+    }
+
+    #[handle_result]
     fn create_new_epoch(&mut self) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
@@ -119,6 +150,21 @@ impl MetaDaoContract {
         self.is_epoch_on = true;
 
         Ok(())
+    }
+
+    #[handle_result]
+    fn end_epoch(&mut self) -> Result<(), MetaDaoError> {
+        if env::predecessor_account_id() != self.admin {
+            return Err(MetaDaoError::InvalidAdminCall);
+        }
+
+        if self.is_epoch_on {
+            return Err(MetaDaoError::EpochIsOff);
+        }
+
+        self.is_epoch_on = false;
+        self.in_funding = false;
+        self.in_minting = false;
     }
 
     #[payable]
