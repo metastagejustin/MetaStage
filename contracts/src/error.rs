@@ -21,6 +21,12 @@ pub enum MetaDaoError {
     UserDidNotAttachEnoughFunds,
     #[error("User already registered funds to creator")]
     UserAlreadyRegisteredFundsToCreator,
+    #[error("Already in funding period")]
+    AlreadyInFunding,
+    #[error("Already in minting period")]
+    AlreadyInMinting,
+    #[error("Not in minting period")]
+    NotInMintingPeriod,
 }
 
 impl AsRef<str> for NearConLiqError {
@@ -36,6 +42,9 @@ impl AsRef<str> for NearConLiqError {
             Self::NotInFundingPeriod => "Not in funding period",
             Self::UserDidNotAttachEnoughFunds => "User did not attach enough funds to contract call",
             Self::UserAlreadyRegisteredfundsToCreator => "User already registered funds to creator",
+            Self::AlreadyInFunding => "Already in funding period",
+            Self::AlreadyInMinting => "Already in minting period",
+            Self::NotInMintingPeriod => "Not in minting period",
         }
     }
 }
