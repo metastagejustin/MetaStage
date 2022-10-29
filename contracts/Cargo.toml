@@ -10,10 +10,10 @@ crate-type = ["cdylib"]
 [dependencies]
 near-contract-standards = "4.0.0"
 near-sdk = "4.0.0"
+near-units = "0.2.0"
 thiserror = "1.0.26"
 
 [dev-dependencies]
-near-units = "0.2.0"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 tokio = { version = "1.18.1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }

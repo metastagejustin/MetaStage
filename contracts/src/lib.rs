@@ -2,11 +2,17 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
+use near_units::parse_near;
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crate::error::MetaDaoError;
+use crate::{
+    consts::NFT_RANKING,
+    error::MetaDaoError,
+    nft::{CreatorNFTRanking, CreatorNFTRankings, UserNFTRank},
+};
 
+mod consts;
 mod error;
 mod nft;
 mod token_receiver;
@@ -25,16 +31,35 @@ impl Epoch {
         self.0
     }
 
-    fn next_epoch(&mut self) {
+    fn next_epoch(&self) -> Epoch {
+        Self(self.0 + 1)
+    }
+
+    fn previous_epoch(&self) -> Option<Epoch> {
+        match self.0.checked_sub(1) {
+            None => None,
+            Some(val) => Some(Epoch(val)),
+        }
+    }
+
+    fn update_epoch(&mut self) {
         self.0 += 1
     }
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
-pub struct TokenAmount {
+pub struct FundedTokenAmount {
     pub creator_id: CreatorAccountId,
-    pub token_id: FTAccountId,
+    pub ft_token_id: FTAccountId,
+    pub amount: u128,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ObtainedTokenAmounts {
+    pub user_id: UserAccountId,
+    pub ft_token_id: FTAccountId,
     pub amount: u128,
 }
 
@@ -43,13 +68,13 @@ pub struct TokenAmount {
 pub struct MetaDaoContract {
     pub admin: AccountId, // TODO: can we do it without an admin ?
     pub epoch: Epoch,
-    pub user_votes_mapping: LookupMap<Epoch, HashMap<UserAccountId, Vec<CreatorAccountId>>>,
-    pub creator_votes_mapping: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<UserAccountId>>>,
-    pub creator_funds: LookupMap<Epoch, HashMap<CreatorAccountId, Vec<TokenAmount>>>,
-    pub user_funding: LookupMap<Epoch, HashMap<UserAccountId, Vec<TokenAmount>>>,
-    pub creator_obtained_funds: LookupMap<Epoch, HashMap<UserAccountId, bool>>,
+    pub creator_funding:
+        UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, Vec<ObtainedTokenAmounts>>>,
+    pub user_funds: UnorderedMap<Epoch, UnorderedMap<UserAccountId, Vec<FundedTokenAmount>>>,
+    pub creator_obtained_complete_funding: LookupMap<Epoch, HashMap<UserAccountId, bool>>,
     pub creator_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
-    pub creator_nft_ranks: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, NFTRanking>>,
+    pub creator_nft_ranks: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, CreatorNFTRankings>>,
+    pub allowed_fungible_tokens_funding: UnorderedMap<Epoch, UnorderedSet<FTAccountId>>,
     pub is_epoch_on: bool,
     pub in_minting: bool,
     pub in_funding: bool,
@@ -59,35 +84,41 @@ pub struct MetaDaoContract {
 impl MetaDaoContract {
     #[init]
     pub fn new(admin: AccountId) -> Self {
-        let user_votes_mapping =
-            LookupMap::<Epoch, HashMap<UserAccountId, Vec<CreatorAccountId>>>::new(b"a".to_vec());
-        let creator_votes_mapping =
-            LookupMap::<Epoch, HashMap<CreatorAccountId, Vec<UserAccountId>>>::new(b"b".to_vec());
+        let creator_funding = UnorderedMap::<
+            Epoch,
+            UnorderedMap<CreatorAccountId, Vec<ObtainedTokenAmounts>>,
+        >::new(b"a".to_vec());
+        let user_funds =
+            UnorderedMap::<Epoch, UnorderedMap<UserAccountId, Vec<FundedTokenAmount>>>::new(
+                b"b".to_vec(),
+            );
 
-        let creator_funds =
-            LookupMap::<Epoch, HashMap<CreatorAccountId, Vec<TokenAmount>>>::new(b"c".to_vec());
-
-        let user_funding =
-            LookupMap::<Epoch, HashMap<UserAccountId, TokenAmount>>::new(b"d".to_vec());
-
-        let creator_obtained_funds =
+        let creator_obtained_complete_funding =
             LookupMap::<Epoch, HashMap<CreatorAccountId, bool>>::new(b"e".to_vec());
 
         let creator_per_epoch_set =
             UnorderedMap::<Epoch, UnorderedSet<CreatorAccountId>>::new(b"f".to_vec());
 
+        let creator_nft_ranks = UnorderedMap::<
+            Epoch,
+            UnorderedMap<CreatorAccountId, CreatorNFTRankings>,
+        >::new(b"h".to_vec());
+
+        let allowed_fungible_tokens_funding =
+            UnorderedMap::<Epoch, UnorderedSet<FTAccountId>>::new(b"g".to_vec());
+
         Self {
             admin,
             epoch: Epoch(0u16),
-            user_votes_mapping,
-            creator_votes_mapping,
-            creator_funds,
-            user_funding,
-            creator_obtained_funds,
+            creator_funding,
+            user_funds,
+            creator_obtained_complete_funding,
             is_epoch_on: false,
             in_minting: false,
             in_funding: false,
             creator_per_epoch_set,
+            creator_nft_ranks,
+            allowed_fungible_tokens_funding,
         }
     }
 
@@ -107,6 +138,8 @@ impl MetaDaoContract {
 
         self.in_minting = false;
         self.in_funding = true;
+
+        Ok(())
     }
 
     #[handle_result]
@@ -120,36 +153,72 @@ impl MetaDaoContract {
         }
 
         self.in_minting = true;
+
+        Ok(())
     }
 
     #[handle_result]
-    fn create_new_epoch(&mut self) -> Result<(), MetaDaoError> {
+    fn create_new_epoch(
+        &mut self,
+        allowed_ft_account_ids: Option<Vec<FTAccountId>>,
+    ) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
         }
 
         if self.is_epoch_on {
-            return Err(MetaDaoError::UnableToCreatNewEpoch);
+            return Err(MetaDaoError::UnableToCreateNewEpoch);
         }
 
         // update epoch
-        self.epoch.next_epoch();
+        self.epoch.update_epoch();
 
         // create new entries for other contract fields, for new epoch
-        self.user_votes_mapping.insert(
+        self.user_funds.insert(
             &self.epoch,
-            &HashMap::<UserAccountId, Vec<CreatorAccountId>>::new(),
+            &UnorderedMap::<UserAccountId, Vec<FundedTokenAmount>>::new(
+                format!("user_funds for epoch: {}", self.epoch.count())
+                    .as_bytes()
+                    .to_vec(),
+            ),
         );
-        self.creator_votes_mapping.insert(
+        self.creator_funding.insert(
             &self.epoch,
-            &HashMap::<CreatorAccountId, Vec<UserAccountId>>::new(),
+            &UnorderedMap::<CreatorAccountId, Vec<ObtainedTokenAmounts>>::new(
+                format!("creator_funding for epoch: {}", self.epoch.count())
+                    .as_bytes()
+                    .to_vec(),
+            ),
         );
-        self.creator_funds.insert(
-            &self.epoch,
-            &HashMap::<CreatorAccountId, Vec<TokenAmount>>::new(),
+
+        let mut allowed_ft_acc_ids = UnorderedSet::<FTAccountId>::new(
+            format!("allowed_ft_acc_ids for epoch: {}", self.epoch.count())
+                .as_bytes()
+                .to_vec(),
         );
-        self.user_funding
-            .insert(&self.epoch, &HashMap::<UserAccountId, TokenAmount>::new());
+
+        if let Some(ft_acc_ids) = allowed_ft_account_ids {
+            for ft_acc_id in &ft_acc_ids {
+                allowed_ft_acc_ids.insert(ft_acc_id);
+            }
+        } else {
+            let previous_allowed_ft_acc_ids = self
+                .allowed_fungible_tokens_funding
+                .get(
+                    &self
+                        .epoch
+                        .previous_epoch()
+                        .ok_or(MetaDaoError::InvalidInitializationOfEpoch)?,
+                )
+                .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
+
+            for ft_acc_id in previous_allowed_ft_acc_ids.iter() {
+                allowed_ft_acc_ids.insert(&ft_acc_id);
+            }
+        }
+        self.allowed_fungible_tokens_funding
+            .insert(&self.epoch, &allowed_ft_acc_ids);
+
         self.is_epoch_on = true;
 
         Ok(())
@@ -168,6 +237,8 @@ impl MetaDaoContract {
         self.is_epoch_on = false;
         self.in_funding = false;
         self.in_minting = false;
+
+        Ok(())
     }
 
     #[payable]
@@ -175,13 +246,13 @@ impl MetaDaoContract {
     #[handle_result]
     fn user_funding_creator(
         &mut self,
+        user_id: UserAccountId,
         creator_account_id: CreatorAccountId,
-        nft_rank: NFTRanking,
+        nft_rank: UserNFTRank,
         ft_token_id: FTAccountId,
     ) -> Result<(), MetaDaoError> {
-        // TODO: refactor this
-        if env::attached_deposit() < 1 {
-            return Err(MetadataoError::UserDidNotAttachEnoughFunds);
+        if env::attached_deposit() < parse_near!("0.01 N") {
+            return Err(MetaDaoError::UserDidNotAttachEnoughFunds);
         }
 
         if !self.is_epoch_on {
@@ -192,87 +263,71 @@ impl MetaDaoContract {
             return Err(MetaDaoError::NotInFundingPeriod);
         }
 
-        if !self.creator_per_epoch_set.contains(&self.epoch) {
+        if self.creator_per_epoch_set.get(&self.epoch).is_none() {
             return Err(MetaDaoError::CreatorIsNotRegistered);
         }
 
         let user_id = env::predecessor_account_id();
 
-        let mut creator_votes_mapping = self
-            .creator_votes_mapping
+        let nft_rankings = self
+            .creator_nft_ranks
             .get(&self.epoch)
             .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
-        let mut creator_votes = creator_votes_mapping.get(&creator_account_id);
+        let creator_nft_ranks = nft_rankings
+            .get(&creator_account_id)
+            .ok_or(MetaDaoError::CreatorIsNotRegistered)?;
 
-        match creator_votes {
-            None => {
-                let users = vec![user_id];
-                creator_votes_mapping.insert(creator_account_id.clone(), users);
-                self.creator_votes_mapping
-                    .insert(&self.epoch, &creator_votes_mapping);
-            }
-            Some(cv) => {
-                if creator_votes.contains(user_id.clone()) {
-                    return Err(MetaDaoError::UserAlreadyRegisteredFundsToCreator);
-                }
-                users.push(user_id.clone());
-                creator_votes.insert(user_id, users);
-                self.creator_votes_mapping
-                    .insert(&self.epoch, &creator_votes_mapping);
-            }
-        }
+        let amount = creator_nft_ranks
+            .get_ranking(nft_rank)
+            .get_amount_from_nft_rank(&ft_token_id)?;
 
-        let mut user_votes_mapping = self
-            .user_votes_mapping
-            .get(&self.epoch)
-            .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
-        let mut user_votes = user_votes_mapping.get(&user_id);
-
-        match user_votes {
-            None => {
-                let creators = vec![creator_account_id.clone()];
-                user_votes_mapping.insert(user_id.clone(), creators);
-                self.user_votes_mapping
-                    .insert(&self.epoch, user_votes_mapping);
-            }
-            Some(uv) => {
-                if uv.contains(creator_id.clone()) {
-                    return Err(MetaDaoError::UserAlreadyRegisteredFundsToCreator);
-                }
-                uv.push(creator_id.clone());
-                user_votes_mapping.insert(user_id.clone(), uv);
-                self.user_votes_mapping
-                    .insert(&self.epoch, &user_votes_mapping);
-            }
-        }
-        //  LookupMap<Epoch, HashMap<UserAccountId, Vec<TokenAmount>>>
-        let nft_rankings = self.creator_nft_ranks.get(&epoch).ok_or(MetaDaoError::InvalidCurrentEpoch)?;
-        let creator_nft_ranks = nft_rankings.get(&creator_account_id).ok_or(MetaDaoError::CreatorIsNotRegistered)?;
-
-        let amount = match nft_rank {
-            NFTRank::Common => creator_nft_ranks[0].get(&ft_token_id).ok_or(MetaDaoError::InvalidFTTokenId)?,
-            NFTRank::Uncommon => creator_nft_ranks[1].get(&ft_token_id).ok_or(MetaDaoError::InvalidFTTokenId)?,
-            NFTRank::Rare => creator_nft_ranks[2].get(&ft_token_id).ok_or(MetaDaoError::InvalidFTTokenId)?,
-        };
-
-        let mut user_token_amounts = self.user_funding.get(&self.epoch);
-        let token_amount = TokenAmount {
-            creator_id: creator_account_id,
-            token_id: ft_token_id,
+        let funded_token_amount = FundedTokenAmount {
+            creator_id: creator_account_id.clone(),
+            ft_token_id: ft_token_id.clone(),
             amount,
         };
 
-        match user_token_amounts {
+        let mut user_funds = self
+            .user_funds
+            .get(&self.epoch)
+            .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
+
+        match user_funds.get(&user_id) {
             None => {
-                let amounts = vec![token_amount];
-                user_token_amounts.insert(user_id.clone(), amounts);
-                self.user_funding.insert(&self.epoch, &user_token_amounts);
+                user_funds.insert(&user_id, &vec![funded_token_amount]);
             }
-            Some(uta) => {
-                amounts.push(token_amount);
-                user_token_amounts.insert(user_id.clone(), amounts);
-                self.user_funding.insert(&self.epoch, &user_token_amounts);
+            Some(mut funds) => {
+                funds.push(funded_token_amount);
+                user_funds.insert(&user_id, &funds);
             }
         }
+
+        self.user_funds.insert(&self.epoch, &user_funds);
+
+        let obtained_token_amount = ObtainedTokenAmounts {
+            user_id,
+            ft_token_id: ft_token_id,
+            amount,
+        };
+
+        let mut creator_fundings = self
+            .creator_funding
+            .get(&self.epoch)
+            .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
+
+        match creator_fundings.get(&creator_account_id) {
+            None => {
+                let amounts = vec![obtained_token_amount];
+                creator_fundings.insert(&creator_account_id, &amounts);
+            }
+            Some(mut amounts) => {
+                amounts.push(obtained_token_amount);
+                creator_fundings.insert(&creator_account_id, &amounts);
+            }
+        }
+
+        self.creator_funding.insert(&self.epoch, &creator_fundings);
+
+        Ok(())
     }
 }

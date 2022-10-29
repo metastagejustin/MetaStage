@@ -27,9 +27,13 @@ pub enum MetaDaoError {
     AlreadyInMinting,
     #[error("Not in minting period")]
     NotInMintingPeriod,
+    #[error("Invalid initialization of epoch")]
+    InvalidInitializationOfEpoch,
+    #[error("Invalid Fungible token id")]
+    InvalidFTTokenId,
 }
 
-impl AsRef<str> for NearConLiqError {
+impl AsRef<str> for MetaDaoError {
     fn as_ref(&self) -> &str {
         match self {
             Self::InvalidAdminCall => "Invalid Admin call",
@@ -43,10 +47,12 @@ impl AsRef<str> for NearConLiqError {
             Self::UserDidNotAttachEnoughFunds => {
                 "User did not attach enough funds to contract call"
             }
-            Self::UserAlreadyRegisteredfundsToCreator => "User already registered funds to creator",
+            Self::UserAlreadyRegisteredFundsToCreator => "User already registered funds to creator",
             Self::AlreadyInFunding => "Already in funding period",
             Self::AlreadyInMinting => "Already in minting period",
             Self::NotInMintingPeriod => "Not in minting period",
+            Self::InvalidInitializationOfEpoch => "Invalid initialization of epoch",
+            Self::InvalidFTTokenId => "Invalid Fungible token id",
         }
     }
 }
