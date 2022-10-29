@@ -40,7 +40,9 @@ impl AsRef<str> for NearConLiqError {
             Self::InvalidCurrentEpoch => "Invalid current epoch",
             Self::EpochIsOff => "Currently, epoch is off",
             Self::NotInFundingPeriod => "Not in funding period",
-            Self::UserDidNotAttachEnoughFunds => "User did not attach enough funds to contract call",
+            Self::UserDidNotAttachEnoughFunds => {
+                "User did not attach enough funds to contract call"
+            }
             Self::UserAlreadyRegisteredfundsToCreator => "User already registered funds to creator",
             Self::AlreadyInFunding => "Already in funding period",
             Self::AlreadyInMinting => "Already in minting period",

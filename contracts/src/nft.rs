@@ -10,10 +10,18 @@ use crate::TokenAmount;
 
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
 #[serde(crate = "near_sdk::serde")]
-pub enum NFTRanking {
-    Common(Vec<TokenAmount>),
-    Uncommon(Vec<TokenAmount>),
-    Rare(Vec<TokenAmount>),
+pub enum UserNFTRank {
+    Common,
+    Uncommon,
+    Rare,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTRanking {
+    Common(HashMap<FTAccountId, u128>),
+    Uncommon(HashMap<FTAccountId, u128>),
+    Rare(HashMap<FTAccountId, u128>),
 }
 
 pub fn get_metadata(
