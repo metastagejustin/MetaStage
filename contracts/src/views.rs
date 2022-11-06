@@ -1,5 +1,4 @@
-use near_contract_standards::fungible_token::{core::ext_ft_core, receiver::FungibleTokenReceiver};
-use near_sdk::{env, ext_contract, near_bindgen, Promise, PromiseOrValue};
+use near_sdk::near_bindgen;
 
 use crate::{error::MetaDaoError, *};
 
@@ -26,3 +25,6 @@ impl MetaDaoContract {
     //     Ok(votes_mapping.contains_key(&user_id))
     // }
 }
+
+#[cfg(test)]
+mod tests {}
