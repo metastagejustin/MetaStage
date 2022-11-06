@@ -1,13 +1,10 @@
-use near_contract_standards::non_fungible_token::{
-    metadata::{NFTContractMetadata, NonFungibleTokenMetadataProvider, TokenMetadata},
-    Token, TokenId,
-};
+use near_contract_standards::non_fungible_token::metadata::TokenMetadata;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, Promise, PromiseOrValue};
+use near_sdk::AccountId;
 use std::collections::HashMap;
 
-use crate::{consts::NFT_RANKING, error::MetaDaoError, FTAccountId};
+use crate::{error::MetaDaoError, FTAccountId};
 
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
 #[serde(crate = "near_sdk::serde")]
@@ -81,3 +78,6 @@ pub fn get_metadata(
         reference_hash: None,
     }
 }
+
+#[cfg(test)]
+mod tests {}

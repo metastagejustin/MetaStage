@@ -1,6 +1,6 @@
-use near_contract_standards::fungible_token::{core::ext_ft_core, receiver::FungibleTokenReceiver};
+use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::json_types::U128;
-use near_sdk::{env, ext_contract, near_bindgen, Promise, PromiseOrValue};
+use near_sdk::{env, near_bindgen, PromiseOrValue};
 
 use crate::*;
 
@@ -46,3 +46,6 @@ impl FungibleTokenReceiver for MetaDaoContract {
         PromiseOrValue::Value(U128(0))
     }
 }
+
+#[cfg(test)]
+mod tests {}

@@ -4,12 +4,10 @@ use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 use near_units::parse_near;
 use std::collections::HashMap;
-use std::hash::Hash;
 
 use crate::{
-    consts::NFT_RANKING,
     error::MetaDaoError,
-    nft::{CreatorNFTRanking, CreatorNFTRankings, UserNFTRank},
+    nft::{CreatorNFTRankings, UserNFTRank},
 };
 
 mod consts;
@@ -267,8 +265,6 @@ impl MetaDaoContract {
             return Err(MetaDaoError::CreatorIsNotRegistered);
         }
 
-        let user_id = env::predecessor_account_id();
-
         let nft_rankings = self
             .creator_nft_ranks
             .get(&self.epoch)
@@ -331,3 +327,6 @@ impl MetaDaoContract {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {}
