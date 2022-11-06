@@ -329,4 +329,54 @@ impl MetaDaoContract {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{
+        testing_env, AccountId, Gas, MockedBlockchain, PromiseResult, RuntimeFeesConfig, VMConfig,
+        VMContext,
+    };
+    use std::convert::TryInto;
+
+    /// utility function for testing callbacks logic
+    #[allow(dead_code)]
+    pub fn testing_env_with_promise_results(
+        context: VMContext,
+        promise_results: Vec<PromiseResult>,
+    ) {
+        near_sdk::env::set_blockchain_interface(MockedBlockchain::new(
+            context,
+            VMConfig::test(),
+            RuntimeFeesConfig::test(),
+            promise_results,
+            Default::default(),
+            Default::default(),
+            None,
+        ));
+    }
+
+    pub fn to_yocto(value: &str) -> u128 {
+        let vals: Vec<_> = value.split('.').collect();
+        let part1 = vals[0].parse::<u128>().unwrap() * 10u128.pow(24);
+        if vals.len() > 1 {
+            let power = vals[1].len() as u32;
+            let part2 = vals[1].parse::<u128>().unwrap() * 10u128.pow(24 - power);
+            part1 + part2
+        } else {
+            part1
+        }
+    }
+
+    fn get_context_with_storage(storage: u128) -> VMContext {
+        let contract_account_id: AccountId = "conliq.testnet".to_string().try_into().unwrap();
+
+        VMContextBuilder::new()
+            .current_account_id(contract_account_id)
+            .attached_deposit(to_yocto("1000"))
+            .signer_account_id(accounts(1))
+            .predecessor_account_id(accounts(1))
+            .prepaid_gas(Gas(300 * 10u64.pow(16)))
+            .attached_deposit(storage)
+            .build()
+    }
+}
