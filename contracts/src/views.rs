@@ -13,7 +13,7 @@ impl MetaDaoContract {
             .creator_obtained_complete_funding
             .get(&self.epoch)
             .ok_or(MetaDaoError::CreatorIsNotRegistered)?;
-        Ok(!creator_funds.get(&creator_id).is_none())
+        Ok(creator_funds.get(&creator_id).is_some())
     }
 
     // #[handle_result]

@@ -28,7 +28,7 @@ impl FungibleTokenReceiver for MetaDaoContract {
 
         let ft_token_id = env::predecessor_account_id();
 
-        let metadata = msg.split("_").collect::<Vec<_>>();
+        let metadata = msg.split('_').collect::<Vec<_>>();
         let creator_account_id = AccountId::try_from(metadata[0].to_string())
             .expect("MetaDaoContract::ft_on_transfer: failed to parse creator account id");
         let nft_rank = match metadata[1] {

@@ -1,9 +1,8 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{LookupMap, UnorderedMap, UnorderedSet};
+use near_sdk::collections::{UnorderedMap, UnorderedSet};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 use near_units::parse_near;
-use std::collections::HashMap;
 
 use crate::{
     error::MetaDaoError,
@@ -13,6 +12,7 @@ use crate::{
 mod consts;
 mod error;
 mod nft;
+mod tests;
 mod token_receiver;
 mod views;
 
@@ -20,7 +20,9 @@ pub type CreatorAccountId = AccountId;
 pub type UserAccountId = AccountId;
 pub type FTAccountId = AccountId;
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
+#[derive(
+    BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, Copy, Eq, PartialEq,
+)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Epoch(u16);
 
@@ -34,10 +36,7 @@ impl Epoch {
     }
 
     fn previous_epoch(&self) -> Option<Epoch> {
-        match self.0.checked_sub(1) {
-            None => None,
-            Some(val) => Some(Epoch(val)),
-        }
+        self.0.checked_sub(1).map(Epoch)
     }
 
     fn update_epoch(&mut self) {
@@ -69,7 +68,7 @@ pub struct MetaDaoContract {
     pub creator_funding:
         UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, Vec<ObtainedTokenAmounts>>>,
     pub user_funds: UnorderedMap<Epoch, UnorderedMap<UserAccountId, Vec<FundedTokenAmount>>>,
-    pub creator_obtained_complete_funding: LookupMap<Epoch, HashMap<UserAccountId, bool>>,
+    pub creator_obtained_complete_funding: UnorderedMap<Epoch, UnorderedMap<UserAccountId, bool>>,
     pub creator_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
     pub creator_nft_ranks: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, CreatorNFTRankings>>,
     pub allowed_fungible_tokens_funding: UnorderedMap<Epoch, UnorderedSet<FTAccountId>>,
@@ -92,7 +91,7 @@ impl MetaDaoContract {
             );
 
         let creator_obtained_complete_funding =
-            LookupMap::<Epoch, HashMap<CreatorAccountId, bool>>::new(b"e".to_vec());
+            UnorderedMap::<Epoch, UnorderedMap<CreatorAccountId, bool>>::new(b"e".to_vec());
 
         let creator_per_epoch_set =
             UnorderedMap::<Epoch, UnorderedSet<CreatorAccountId>>::new(b"f".to_vec());
@@ -126,6 +125,10 @@ impl MetaDaoContract {
             return Err(MetaDaoError::InvalidAdminCall);
         }
 
+        if !self.is_epoch_on {
+            return Err(MetaDaoError::EpochIsOff);
+        }
+
         if self.in_funding {
             return Err(MetaDaoError::AlreadyInFunding);
         }
@@ -146,6 +149,14 @@ impl MetaDaoContract {
             return Err(MetaDaoError::InvalidAdminCall);
         }
 
+        if !self.is_epoch_on {
+            return Err(MetaDaoError::EpochIsOff);
+        }
+
+        if self.in_funding {
+            return Err(MetaDaoError::AlreadyInFunding);
+        }
+
         if self.in_minting {
             return Err(MetaDaoError::AlreadyInMinting);
         }
@@ -164,6 +175,8 @@ impl MetaDaoContract {
             return Err(MetaDaoError::InvalidAdminCall);
         }
 
+        // it is enough to check this, as if epoch is set to false
+        // minting and funding should also be set to false
         if self.is_epoch_on {
             return Err(MetaDaoError::UnableToCreateNewEpoch);
         }
@@ -184,6 +197,30 @@ impl MetaDaoContract {
             &self.epoch,
             &UnorderedMap::<CreatorAccountId, Vec<ObtainedTokenAmounts>>::new(
                 format!("creator_funding for epoch: {}", self.epoch.count())
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        );
+        self.creator_nft_ranks.insert(
+            &self.epoch,
+            &UnorderedMap::<CreatorAccountId, CreatorNFTRankings>::new(
+                format!("creator nft rankings for epoch: {}", self.epoch.count())
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        );
+        self.creator_obtained_complete_funding.insert(
+            &self.epoch,
+            &UnorderedMap::<CreatorAccountId, bool>::new(
+                format!("Creator got funds for epoch: {}", self.epoch.count())
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        );
+        self.creator_per_epoch_set.insert(
+            &self.epoch,
+            &UnorderedSet::<CreatorAccountId>::new(
+                format!("Creator per epoch set for epoch: {}", self.epoch.count())
                     .as_bytes()
                     .to_vec(),
             ),
@@ -228,8 +265,16 @@ impl MetaDaoContract {
             return Err(MetaDaoError::InvalidAdminCall);
         }
 
-        if self.is_epoch_on {
+        if !self.is_epoch_on {
             return Err(MetaDaoError::EpochIsOff);
+        }
+
+        if self.in_minting {
+            return Err(MetaDaoError::AlreadyInMinting);
+        }
+
+        if self.in_funding {
+            return Err(MetaDaoError::AlreadyInFunding);
         }
 
         self.is_epoch_on = false;
@@ -302,7 +347,7 @@ impl MetaDaoContract {
 
         let obtained_token_amount = ObtainedTokenAmounts {
             user_id,
-            ft_token_id: ft_token_id,
+            ft_token_id,
             amount,
         };
 
@@ -329,7 +374,7 @@ impl MetaDaoContract {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::{
@@ -378,5 +423,459 @@ mod tests {
             .prepaid_gas(Gas(300 * 10u64.pow(16)))
             .attached_deposit(storage)
             .build()
+    }
+
+    #[test]
+    fn test_new_works() {
+        let admin: AccountId = "admin.near".to_string().try_into().unwrap();
+        let contract = MetaDaoContract::new(admin.clone());
+
+        assert_eq!(contract.epoch, Epoch(0u16));
+
+        assert!(!contract.is_epoch_on);
+        assert!(!contract.in_minting);
+        assert!(!contract.in_funding);
+
+        assert_eq!(contract.admin, admin);
+        assert!(contract.creator_funding.is_empty());
+        assert!(contract.user_funds.is_empty());
+
+        assert!(contract.creator_obtained_complete_funding.is_empty());
+        assert!(contract.creator_per_epoch_set.is_empty());
+        assert!(contract.creator_nft_ranks.is_empty());
+
+        assert!(contract.allowed_fungible_tokens_funding.is_empty());
+    }
+
+    #[test]
+    fn test_set_funding_works() {
+        let admin: AccountId = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+
+        contract.set_funding().unwrap();
+
+        assert!(contract.in_funding);
+        assert!(!contract.in_minting);
+        assert!(contract.is_epoch_on);
+    }
+
+    #[test]
+    fn test_set_funding_fails_if_not_admin() {
+        let admin: AccountId = "admin.near".to_string().try_into().unwrap();
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+
+        assert!(contract
+            .set_funding()
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Admin call"));
+    }
+
+    #[test]
+    fn test_set_funding_fails_if_epoch_is_off() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = false;
+        contract.in_minting = true;
+
+        assert!(contract
+            .set_funding()
+            .unwrap_err()
+            .to_string()
+            .contains("Currently, epoch is off"));
+    }
+
+    #[test]
+    fn test_set_funding_fails_if_minting_off() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = false;
+
+        assert!(contract
+            .set_funding()
+            .unwrap_err()
+            .to_string()
+            .contains("Not in minting period"));
+    }
+
+    #[test]
+    fn test_set_funding_fails_if_already_in_funding() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+        contract.in_funding = true;
+
+        assert!(contract
+            .set_funding()
+            .unwrap_err()
+            .to_string()
+            .contains("Already in funding period"));
+    }
+
+    #[test]
+    fn test_set_minting_works() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+
+        contract.set_minting().unwrap();
+
+        assert!(contract.in_minting);
+        assert!(contract.is_epoch_on);
+        assert!(!contract.in_funding);
+    }
+
+    #[test]
+    fn test_set_minting_fails_if_not_admin() {
+        let admin: AccountId = "admin.near".to_string().try_into().unwrap();
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+
+        assert!(contract
+            .set_minting()
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Admin call"));
+    }
+
+    #[test]
+    fn test_set_minting_fails_if_epoch_is_off() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = false;
+        contract.in_minting = true;
+
+        assert!(contract
+            .set_minting()
+            .unwrap_err()
+            .to_string()
+            .contains("Currently, epoch is off"));
+    }
+
+    #[test]
+    fn test_set_minting_fails_if_minting_on() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+        contract.in_funding = false;
+
+        assert!(contract
+            .set_minting()
+            .unwrap_err()
+            .to_string()
+            .contains("Already in minting period"));
+    }
+
+    #[test]
+    fn test_set_minting_fails_if_already_in_funding() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+        contract.in_funding = true;
+
+        assert!(contract
+            .set_minting()
+            .unwrap_err()
+            .to_string()
+            .contains("Already in funding period"));
+    }
+
+    #[test]
+    fn test_end_epoch_works() {
+        let admin = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+
+        contract.end_epoch().unwrap();
+
+        assert!(!contract.is_epoch_on);
+        assert!(!contract.in_funding);
+        assert!(!contract.in_minting);
+    }
+
+    #[test]
+    fn test_end_epoch_fails_if_not_call_by_admin() {
+        let admin: AccountId = "admin.near".to_string().try_into().unwrap();
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        assert!(contract
+            .end_epoch()
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Admin call"));
+    }
+
+    #[test]
+    fn test_end_epoch_fails_if_epoch_off() {
+        let admin: AccountId = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = false;
+
+        assert!(contract
+            .end_epoch()
+            .unwrap_err()
+            .to_string()
+            .contains("Currently, epoch is off"));
+    }
+
+    #[test]
+    fn test_end_epoch_fails_if_minting_on() {
+        let admin: AccountId = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = true;
+
+        assert!(contract
+            .end_epoch()
+            .unwrap_err()
+            .to_string()
+            .contains("Already in minting"));
+    }
+
+    #[test]
+    fn test_end_epoch_fails_if_funding_on() {
+        let admin: AccountId = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+
+        contract.is_epoch_on = true;
+        contract.in_minting = false;
+        contract.in_funding = true;
+
+        assert!(contract
+            .end_epoch()
+            .unwrap_err()
+            .to_string()
+            .contains("Already in funding"));
+    }
+
+    #[test]
+    fn test_create_epoch_works() {
+        let admin: AccountId = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts))
+            .unwrap();
+
+        assert_eq!(contract.epoch, Epoch(1u16));
+        assert!(contract.is_epoch_on);
+        assert!(!contract.in_funding);
+        assert!(!contract.in_minting);
+
+        let epoch = Epoch(1u16);
+
+        assert!(contract.creator_funding.get(&epoch).unwrap().is_empty());
+        assert!(contract.creator_nft_ranks.get(&epoch).unwrap().is_empty());
+        assert!(contract.user_funds.get(&epoch).unwrap().is_empty());
+        assert!(contract
+            .creator_obtained_complete_funding
+            .get(&epoch)
+            .unwrap()
+            .is_empty());
+        assert!(contract
+            .creator_per_epoch_set
+            .get(&epoch)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            contract
+                .allowed_fungible_tokens_funding
+                .get(&epoch)
+                .unwrap()
+                .len(),
+            2u64
+        );
+        assert!(contract
+            .allowed_fungible_tokens_funding
+            .get(&epoch)
+            .unwrap()
+            .contains(&AccountId::try_from(String::from("wrap.near")).unwrap()));
+        assert!(contract
+            .allowed_fungible_tokens_funding
+            .get(&epoch)
+            .unwrap()
+            .contains(&AccountId::try_from(String::from("usn")).unwrap()));
+    }
+
+    #[test]
+    fn test_create_new_epoch_fails_if_not_admin_call() {
+        let admin: AccountId = "admin.near".to_string().try_into().unwrap();
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts))
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Admin call");
+    }
+
+    #[test]
+    fn test_create_new_epoch_fails_if_epoch_on() {
+        let admin: AccountId = accounts(1);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        contract.is_epoch_on = true;
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts))
+            .unwrap_err()
+            .to_string()
+            .contains("Unable to create a new epoch, while previous epoch is still ongoing");
+    }
+
+    #[test]
+    fn test_user_funding_creator_works() {
+        let admin: AccountId = accounts(1);
+        let storage = parse_near!("0.01 N");
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts))
+            .unwrap();
+
+        contract.in_funding = true;
+
+        let user_id: AccountId = "user.near".to_string().try_into().unwrap();
+        let creator_account_id = "creator.near".to_string().try_into().unwrap();
+        let nft_rank = UserNFTRank::Common;
+        let ft_token_id = "wrap.near".to_string().try_into().unwrap();
+
+        contract
+            .user_funding_creator(user_id, creator_account_id, nft_rank, ft_token_id)
+            .unwrap();
+
+        // TODO: continue test
     }
 }
