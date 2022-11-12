@@ -4,20 +4,14 @@ version = "0.1.0"
 authors = ["MetaStage-dev-members"]
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 near-contract-standards = "4.0.0"
 near-sdk = "4.0.0"
 near-units = "0.2.0"
 thiserror = "1.0.26"
 
-[dev-dependencies]
-serde_json = { version = "1.0", features = ["arbitrary_precision"] }
-tokio = { version = "1.18.1", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-workspaces = { version = "0.5.0", features = ["unstable"] }
+[lib]
+crate-type = ["cdylib"]
 
 [profile.release]
 codegen-units = 1
