@@ -496,7 +496,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_funding_fails_if_Registration_off() {
+    fn test_set_funding_fails_if_registration_off() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -537,7 +537,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_Registration_works() {
+    fn test_set_registration_works() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -556,7 +556,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_Registration_fails_if_not_admin() {
+    fn test_set_registration_fails_if_not_admin() {
         let admin: AccountId = "admin.near".to_string().try_into().unwrap();
         let storage = 1u128;
 
@@ -576,7 +576,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_Registration_fails_if_epoch_is_off() {
+    fn test_set_registration_fails_if_epoch_is_off() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -596,7 +596,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_Registration_fails_if_Registration_on() {
+    fn test_set_registration_fails_if_registration_on() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -617,7 +617,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_Registration_fails_if_already_in_funding() {
+    fn test_set_registration_fails_if_already_in_funding() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -693,7 +693,7 @@ mod test {
     }
 
     #[test]
-    fn test_end_epoch_fails_if_Registration_on() {
+    fn test_end_epoch_fails_if_registration_on() {
         let admin: AccountId = accounts(1);
         let storage = 1u128;
 
