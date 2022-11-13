@@ -22,6 +22,54 @@ pub enum CreatorNFTRanking {
     Rare(HashMap<FTAccountId, u128>),
 }
 
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTTitle {
+    Common(String),
+    Uncommon(String),
+    Rare(String),
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTDescription {
+    Common(String),
+    Uncommon(String),
+    Rare(String),
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTMedia {
+    Common(Option<String>),
+    Uncommon(Option<String>),
+    Rare(Option<String>),
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTCopies {
+    Common(u64),
+    Uncommon(u64),
+    Rare(u64),
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTExtra {
+    Common(String),
+    Uncommon(String),
+    Rare(String),
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CreatorNFTReference {
+    Common(Option<String>),
+    Uncommon(Option<String>),
+    Rare(Option<String>),
+}
+
 impl CreatorNFTRanking {
     pub fn get_amount_from_nft_rank(
         &self,
