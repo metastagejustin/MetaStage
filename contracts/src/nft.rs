@@ -41,9 +41,9 @@ pub enum CreatorNFTDescription {
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTMedia {
-    Common(Option<String>),
-    Uncommon(Option<String>),
-    Rare(Option<String>),
+    Common(String),
+    Uncommon(String),
+    Rare(String),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
