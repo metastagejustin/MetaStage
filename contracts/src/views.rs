@@ -5,15 +5,17 @@ use crate::{error::MetaDaoError, *};
 #[near_bindgen]
 impl MetaDaoContract {
     #[handle_result]
-    pub fn creator_got_enough_funds(
-        &self,
-        creator_id: CreatorAccountId,
-    ) -> Result<bool, MetaDaoError> {
-        let creator_funds = self
-            .creator_obtained_complete_funding
+    pub fn creator_total_funds(&self, creator_id: CreatorAccountId) -> Result<u128, MetaDaoError> {
+        let creator_funds_map = self
+            .creator_funding
             .get(&self.epoch)
             .ok_or(MetaDaoError::CreatorIsNotRegistered)?;
-        Ok(creator_funds.get(&creator_id).is_some())
+
+        if let Some(funds) = creator_funds_map.get(&creator_id) {
+            Ok(funds.iter().rfold(0u128, |a, b| a + b.amount))
+        } else {
+            Ok(0u128)
+        }
     }
 
     // #[handle_result]

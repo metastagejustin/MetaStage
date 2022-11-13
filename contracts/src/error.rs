@@ -23,14 +23,16 @@ pub enum MetaDaoError {
     UserAlreadyRegisteredFundsToCreator,
     #[error("Already in funding period")]
     AlreadyInFunding,
-    #[error("Already in minting period")]
-    AlreadyInMinting,
-    #[error("Not in minting period")]
-    NotInMintingPeriod,
+    #[error("Already in Registration period")]
+    AlreadyInRegistration,
+    #[error("Not in Registration period")]
+    NotInRegistrationPeriod,
     #[error("Invalid initialization of epoch")]
     InvalidInitializationOfEpoch,
     #[error("Invalid Fungible token id")]
     InvalidFTTokenId,
+    #[error("Uncovered storage costs")]
+    UncoveredStorageCosts,
 }
 
 impl AsRef<str> for MetaDaoError {
@@ -49,10 +51,11 @@ impl AsRef<str> for MetaDaoError {
             }
             Self::UserAlreadyRegisteredFundsToCreator => "User already registered funds to creator",
             Self::AlreadyInFunding => "Already in funding period",
-            Self::AlreadyInMinting => "Already in minting period",
-            Self::NotInMintingPeriod => "Not in minting period",
+            Self::AlreadyInRegistration => "Already in Registration period",
+            Self::NotInRegistrationPeriod => "Not in Registration period",
             Self::InvalidInitializationOfEpoch => "Invalid initialization of epoch",
             Self::InvalidFTTokenId => "Invalid Fungible token id",
+            Self::UncoveredStorageCosts => "Uncovered storage costs",
         }
     }
 }

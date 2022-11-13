@@ -3,6 +3,7 @@ use near_sdk::collections::{UnorderedMap, UnorderedSet};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 use near_units::parse_near;
+use registry::CreatorMetadata;
 
 use crate::{
     error::MetaDaoError,
@@ -12,6 +13,7 @@ use crate::{
 mod consts;
 mod error;
 mod nft;
+mod registry;
 mod tests;
 mod token_receiver;
 mod views;
@@ -68,12 +70,11 @@ pub struct MetaDaoContract {
     pub creator_funding:
         UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, Vec<ObtainedTokenAmounts>>>,
     pub user_funds: UnorderedMap<Epoch, UnorderedMap<UserAccountId, Vec<FundedTokenAmount>>>,
-    pub creator_obtained_complete_funding: UnorderedMap<Epoch, UnorderedMap<UserAccountId, bool>>,
-    pub creator_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
-    pub creator_nft_ranks: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, CreatorNFTRankings>>,
+    pub creators_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
+    pub creators_metadata: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, CreatorMetadata>>,
     pub allowed_fungible_tokens_funding: UnorderedMap<Epoch, UnorderedSet<FTAccountId>>,
     pub is_epoch_on: bool,
-    pub in_minting: bool,
+    pub in_registration: bool,
     pub in_funding: bool,
 }
 
@@ -90,15 +91,12 @@ impl MetaDaoContract {
                 b"b".to_vec(),
             );
 
-        let creator_obtained_complete_funding =
-            UnorderedMap::<Epoch, UnorderedMap<CreatorAccountId, bool>>::new(b"e".to_vec());
-
-        let creator_per_epoch_set =
+        let creators_per_epoch_set =
             UnorderedMap::<Epoch, UnorderedSet<CreatorAccountId>>::new(b"f".to_vec());
 
-        let creator_nft_ranks = UnorderedMap::<
+        let creators_metadata = UnorderedMap::<
             Epoch,
-            UnorderedMap<CreatorAccountId, CreatorNFTRankings>,
+            UnorderedMap<CreatorAccountId, CreatorMetadata>,
         >::new(b"h".to_vec());
 
         let allowed_fungible_tokens_funding =
@@ -109,12 +107,11 @@ impl MetaDaoContract {
             epoch: Epoch(0u16),
             creator_funding,
             user_funds,
-            creator_obtained_complete_funding,
             is_epoch_on: false,
-            in_minting: false,
+            in_registration: false,
             in_funding: false,
-            creator_per_epoch_set,
-            creator_nft_ranks,
+            creators_per_epoch_set,
+            creators_metadata,
             allowed_fungible_tokens_funding,
         }
     }
@@ -133,18 +130,18 @@ impl MetaDaoContract {
             return Err(MetaDaoError::AlreadyInFunding);
         }
 
-        if !self.in_minting {
-            return Err(MetaDaoError::NotInMintingPeriod);
+        if !self.in_registration {
+            return Err(MetaDaoError::NotInRegistrationPeriod);
         }
 
-        self.in_minting = false;
+        self.in_registration = false;
         self.in_funding = true;
 
         Ok(())
     }
 
     #[handle_result]
-    fn set_minting(&mut self) -> Result<(), MetaDaoError> {
+    fn set_Registration(&mut self) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
         }
@@ -157,11 +154,11 @@ impl MetaDaoContract {
             return Err(MetaDaoError::AlreadyInFunding);
         }
 
-        if self.in_minting {
-            return Err(MetaDaoError::AlreadyInMinting);
+        if self.in_registration {
+            return Err(MetaDaoError::AlreadyInRegistration);
         }
 
-        self.in_minting = true;
+        self.in_registration = true;
 
         Ok(())
     }
@@ -176,7 +173,7 @@ impl MetaDaoContract {
         }
 
         // it is enough to check this, as if epoch is set to false
-        // minting and funding should also be set to false
+        // Registration and funding should also be set to false
         if self.is_epoch_on {
             return Err(MetaDaoError::UnableToCreateNewEpoch);
         }
@@ -201,23 +198,15 @@ impl MetaDaoContract {
                     .to_vec(),
             ),
         );
-        self.creator_nft_ranks.insert(
+        self.creators_metadata.insert(
             &self.epoch,
-            &UnorderedMap::<CreatorAccountId, CreatorNFTRankings>::new(
+            &UnorderedMap::<CreatorAccountId, CreatorMetadata>::new(
                 format!("creator nft rankings for epoch: {}", self.epoch.count())
                     .as_bytes()
                     .to_vec(),
             ),
         );
-        self.creator_obtained_complete_funding.insert(
-            &self.epoch,
-            &UnorderedMap::<CreatorAccountId, bool>::new(
-                format!("Creator got funds for epoch: {}", self.epoch.count())
-                    .as_bytes()
-                    .to_vec(),
-            ),
-        );
-        self.creator_per_epoch_set.insert(
+        self.creators_per_epoch_set.insert(
             &self.epoch,
             &UnorderedSet::<CreatorAccountId>::new(
                 format!("Creator per epoch set for epoch: {}", self.epoch.count())
@@ -269,8 +258,8 @@ impl MetaDaoContract {
             return Err(MetaDaoError::EpochIsOff);
         }
 
-        if self.in_minting {
-            return Err(MetaDaoError::AlreadyInMinting);
+        if self.in_registration {
+            return Err(MetaDaoError::AlreadyInRegistration);
         }
 
         if self.in_funding {
@@ -279,7 +268,7 @@ impl MetaDaoContract {
 
         self.is_epoch_on = false;
         self.in_funding = false;
-        self.in_minting = false;
+        self.in_registration = false;
 
         Ok(())
     }
@@ -306,20 +295,20 @@ impl MetaDaoContract {
             return Err(MetaDaoError::NotInFundingPeriod);
         }
 
-        if self.creator_per_epoch_set.get(&self.epoch).is_none() {
+        if self.creators_per_epoch_set.get(&self.epoch).is_none() {
             return Err(MetaDaoError::CreatorIsNotRegistered);
         }
 
-        let nft_rankings = self
-            .creator_nft_ranks
+        let creators_metadata = self
+            .creators_metadata
             .get(&self.epoch)
             .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
-        let creator_nft_ranks = nft_rankings
+        let creator_metadata = creators_metadata
             .get(&creator_account_id)
             .ok_or(MetaDaoError::CreatorIsNotRegistered)?;
 
-        let amount = creator_nft_ranks
-            .get_ranking(nft_rank)
+        let amount = creator_metadata
+            .nft_rank(nft_rank)
             .get_amount_from_nft_rank(&ft_token_id)?;
 
         let funded_token_amount = FundedTokenAmount {
@@ -433,16 +422,15 @@ mod test {
         assert_eq!(contract.epoch, Epoch(0u16));
 
         assert!(!contract.is_epoch_on);
-        assert!(!contract.in_minting);
+        assert!(!contract.in_registration);
         assert!(!contract.in_funding);
 
         assert_eq!(contract.admin, admin);
         assert!(contract.creator_funding.is_empty());
         assert!(contract.user_funds.is_empty());
 
-        assert!(contract.creator_obtained_complete_funding.is_empty());
-        assert!(contract.creator_per_epoch_set.is_empty());
-        assert!(contract.creator_nft_ranks.is_empty());
+        assert!(contract.creators_per_epoch_set.is_empty());
+        assert!(contract.creators_metadata.is_empty());
 
         assert!(contract.allowed_fungible_tokens_funding.is_empty());
     }
@@ -458,12 +446,12 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
 
         contract.set_funding().unwrap();
 
         assert!(contract.in_funding);
-        assert!(!contract.in_minting);
+        assert!(!contract.in_registration);
         assert!(contract.is_epoch_on);
     }
 
@@ -478,7 +466,7 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
 
         assert!(contract
             .set_funding()
@@ -498,7 +486,7 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = false;
-        contract.in_minting = true;
+        contract.in_registration = true;
 
         assert!(contract
             .set_funding()
@@ -508,7 +496,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_funding_fails_if_minting_off() {
+    fn test_set_funding_fails_if_Registration_off() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -518,13 +506,13 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = false;
+        contract.in_registration = false;
 
         assert!(contract
             .set_funding()
             .unwrap_err()
             .to_string()
-            .contains("Not in minting period"));
+            .contains("Not in Registration period"));
     }
 
     #[test]
@@ -538,7 +526,7 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
         contract.in_funding = true;
 
         assert!(contract
@@ -549,7 +537,7 @@ mod test {
     }
 
     #[test]
-    fn test_set_minting_works() {
+    fn test_set_Registration_works() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -560,15 +548,15 @@ mod test {
 
         contract.is_epoch_on = true;
 
-        contract.set_minting().unwrap();
+        contract.set_Registration().unwrap();
 
-        assert!(contract.in_minting);
+        assert!(contract.in_registration);
         assert!(contract.is_epoch_on);
         assert!(!contract.in_funding);
     }
 
     #[test]
-    fn test_set_minting_fails_if_not_admin() {
+    fn test_set_Registration_fails_if_not_admin() {
         let admin: AccountId = "admin.near".to_string().try_into().unwrap();
         let storage = 1u128;
 
@@ -578,17 +566,17 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
 
         assert!(contract
-            .set_minting()
+            .set_Registration()
             .unwrap_err()
             .to_string()
             .contains("Invalid Admin call"));
     }
 
     #[test]
-    fn test_set_minting_fails_if_epoch_is_off() {
+    fn test_set_Registration_fails_if_epoch_is_off() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -598,17 +586,17 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = false;
-        contract.in_minting = true;
+        contract.in_registration = true;
 
         assert!(contract
-            .set_minting()
+            .set_Registration()
             .unwrap_err()
             .to_string()
             .contains("Currently, epoch is off"));
     }
 
     #[test]
-    fn test_set_minting_fails_if_minting_on() {
+    fn test_set_Registration_fails_if_Registration_on() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -618,18 +606,18 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
         contract.in_funding = false;
 
         assert!(contract
-            .set_minting()
+            .set_Registration()
             .unwrap_err()
             .to_string()
-            .contains("Already in minting period"));
+            .contains("Already in Registration period"));
     }
 
     #[test]
-    fn test_set_minting_fails_if_already_in_funding() {
+    fn test_set_Registration_fails_if_already_in_funding() {
         let admin = accounts(1);
         let storage = 1u128;
 
@@ -639,11 +627,11 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
         contract.in_funding = true;
 
         assert!(contract
-            .set_minting()
+            .set_Registration()
             .unwrap_err()
             .to_string()
             .contains("Already in funding period"));
@@ -665,7 +653,7 @@ mod test {
 
         assert!(!contract.is_epoch_on);
         assert!(!contract.in_funding);
-        assert!(!contract.in_minting);
+        assert!(!contract.in_registration);
     }
 
     #[test]
@@ -705,7 +693,7 @@ mod test {
     }
 
     #[test]
-    fn test_end_epoch_fails_if_minting_on() {
+    fn test_end_epoch_fails_if_Registration_on() {
         let admin: AccountId = accounts(1);
         let storage = 1u128;
 
@@ -715,13 +703,13 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = true;
+        contract.in_registration = true;
 
         assert!(contract
             .end_epoch()
             .unwrap_err()
             .to_string()
-            .contains("Already in minting"));
+            .contains("Already in Registration"));
     }
 
     #[test]
@@ -735,7 +723,7 @@ mod test {
         let mut contract = MetaDaoContract::new(admin.clone());
 
         contract.is_epoch_on = true;
-        contract.in_minting = false;
+        contract.in_registration = false;
         contract.in_funding = true;
 
         assert!(contract
@@ -766,20 +754,16 @@ mod test {
         assert_eq!(contract.epoch, Epoch(1u16));
         assert!(contract.is_epoch_on);
         assert!(!contract.in_funding);
-        assert!(!contract.in_minting);
+        assert!(!contract.in_registration);
 
         let epoch = Epoch(1u16);
 
         assert!(contract.creator_funding.get(&epoch).unwrap().is_empty());
-        assert!(contract.creator_nft_ranks.get(&epoch).unwrap().is_empty());
+        assert!(contract.creators_metadata.get(&epoch).unwrap().is_empty());
         assert!(contract.user_funds.get(&epoch).unwrap().is_empty());
+
         assert!(contract
-            .creator_obtained_complete_funding
-            .get(&epoch)
-            .unwrap()
-            .is_empty());
-        assert!(contract
-            .creator_per_epoch_set
+            .creators_per_epoch_set
             .get(&epoch)
             .unwrap()
             .is_empty());
