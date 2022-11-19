@@ -7,13 +7,11 @@ use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault};
 use near_units::parse_near;
 use registry::CreatorMetadata;
 
-use crate::{
-    error::MetaDaoError,
-    nft::{CreatorNFTRankings, UserNFTRank},
-};
+use crate::{error::MetaDaoError, nft::UserNFTRank};
 
 mod consts;
 mod error;
+mod fund_creators;
 mod nft;
 mod registry;
 mod tests;
@@ -102,6 +100,8 @@ pub struct MetaDaoContract {
     pub in_funding: bool,
     /// Tracks if contract is in minting period
     pub in_minting: bool,
+    /// MetaDao protocol fee
+    pub protocol_fee: UnorderedMap<Epoch, UnorderedMap<FTAccountId, f64>>,
     /// A Non Fungible Token interface
     pub tokens: NonFungibleToken,
     /// A Non Fungible Token interface for Metadata
@@ -133,6 +133,9 @@ impl MetaDaoContract {
 
         let allowed_fungible_tokens_funding =
             UnorderedMap::<Epoch, UnorderedSet<FTAccountId>>::new(b"g".to_vec());
+
+        let protocol_fee =
+            UnorderedMap::<Epoch, UnorderedMap<FTAccountId, f64>>::new(b"h".to_vec());
 
         let tokens = NonFungibleToken::new(
             StorageKey::NonFungibleToken,
@@ -167,6 +170,7 @@ impl MetaDaoContract {
             creators_per_epoch_set,
             creators_metadata,
             allowed_fungible_tokens_funding,
+            protocol_fee,
             tokens,
             metadata,
             nft_id: 0u32,
@@ -198,7 +202,7 @@ impl MetaDaoContract {
     }
 
     #[handle_result]
-    fn set_Registration(&mut self) -> Result<(), MetaDaoError> {
+    fn set_registration(&mut self) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
         }
@@ -224,6 +228,7 @@ impl MetaDaoContract {
     fn create_new_epoch(
         &mut self,
         allowed_ft_account_ids: Option<Vec<FTAccountId>>,
+        protocol_fee: UnorderedMap<FTAccountId, f64>,
     ) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
@@ -299,6 +304,8 @@ impl MetaDaoContract {
         }
         self.allowed_fungible_tokens_funding
             .insert(&self.epoch, &allowed_ft_acc_ids);
+
+        self.protocol_fee.insert(&self.epoch, &protocol_fee);
 
         self.is_epoch_on = true;
 
@@ -597,7 +604,7 @@ mod test {
 
         contract.is_epoch_on = true;
 
-        contract.set_Registration().unwrap();
+        contract.set_registration().unwrap();
 
         assert!(contract.in_registration);
         assert!(contract.is_epoch_on);
@@ -618,7 +625,7 @@ mod test {
         contract.in_registration = true;
 
         assert!(contract
-            .set_Registration()
+            .set_registration()
             .unwrap_err()
             .to_string()
             .contains("Invalid Admin call"));
@@ -638,7 +645,7 @@ mod test {
         contract.in_registration = true;
 
         assert!(contract
-            .set_Registration()
+            .set_registration()
             .unwrap_err()
             .to_string()
             .contains("Currently, epoch is off"));
@@ -659,7 +666,7 @@ mod test {
         contract.in_funding = false;
 
         assert!(contract
-            .set_Registration()
+            .set_registration()
             .unwrap_err()
             .to_string()
             .contains("Already in Registration period"));
@@ -680,7 +687,7 @@ mod test {
         contract.in_funding = true;
 
         assert!(contract
-            .set_Registration()
+            .set_registration()
             .unwrap_err()
             .to_string()
             .contains("Already in funding period"));
@@ -796,8 +803,13 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
         contract
-            .create_new_epoch(Some(allowed_ft_accounts))
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
             .unwrap();
 
         assert_eq!(contract.epoch, Epoch(1u16));
@@ -850,8 +862,13 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
         contract
-            .create_new_epoch(Some(allowed_ft_accounts))
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
             .unwrap_err()
             .to_string()
             .contains("Invalid Admin call");
@@ -873,8 +890,13 @@ mod test {
 
         contract.is_epoch_on = true;
 
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
         contract
-            .create_new_epoch(Some(allowed_ft_accounts))
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
             .unwrap_err()
             .to_string()
             .contains("Unable to create a new epoch, while previous epoch is still ongoing");
@@ -894,8 +916,13 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
         contract
-            .create_new_epoch(Some(allowed_ft_accounts))
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
             .unwrap();
 
         contract.in_funding = true;

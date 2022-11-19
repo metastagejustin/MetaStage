@@ -1,4 +1,6 @@
-use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
+use near_contract_standards::{
+    fungible_token::receiver::FungibleTokenReceiver, storage_management::StorageBalance,
+};
 use near_sdk::json_types::U128;
 use near_sdk::{env, near_bindgen, PromiseOrValue};
 

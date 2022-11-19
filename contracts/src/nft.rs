@@ -251,6 +251,29 @@ impl MetaDaoContract {
         } in creator_obtained_funds
         {
             let token_id = self.get_token_id(&user_id, &nft_rank, &creator_metadata);
+            let token_metadata = creator_metadata.get_token_metadata(nft_rank)?;
+
+            // minf nft for current user
+            self.nft_mint(token_id, user_id.clone(), token_metadata);
+
+            // get contract fee
+            let protocol_fee = self
+                .protocol_fee
+                .get(&self.epoch)
+                .ok_or(MetaDaoError::InvalidCurrentEpoch)?
+                .get(&ft_token_id)
+                .ok_or(MetaDaoError::InvalidFTTokenId)?;
+
+            let creator_amount_to_receive = (amount as f64) * (1.0 - protocol_fee);
+
+            self.external_send_ft_tokens(
+                creator_account_id.clone(),
+                ft_token_id,
+                creator_amount_to_receive as u128,
+            );
+
+            // update nft id
+            self.nft_id += 1;
         }
 
         Ok(())
