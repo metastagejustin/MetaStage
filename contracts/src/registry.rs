@@ -1,4 +1,6 @@
+use near_contract_standards::non_fungible_token::metadata::TokenMetadata;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::Base64VecU8;
 use near_sdk::serde::{Deserialize, Serialize};
 
 use crate::consts::CREATOR_REGISTRY_STORAGE_COST;
@@ -30,6 +32,78 @@ impl CreatorMetadata {
             UserNFTRank::Uncommon => self.nft_ranks[1].clone(),
             UserNFTRank::Rare => self.nft_ranks[2].clone(),
         }
+    }
+
+    pub fn get_nft_ranks(&self) -> Vec<CreatorNFTRanking> {
+        self.nft_ranks.clone()
+    }
+
+    pub fn get_titles(&self) -> Vec<CreatorNFTTitle> {
+        self.titles.clone()
+    }
+
+    pub fn get_descriptions(&self) -> Vec<CreatorNFTDescription> {
+        self.descriptions.clone()
+    }
+
+    pub fn get_medias(&self) -> Vec<CreatorNFTMedia> {
+        self.medias.clone()
+    }
+
+    pub fn get_copies(&self) -> Vec<CreatorNFTCopies> {
+        self.copies.clone()
+    }
+
+    pub fn get_extras(&self) -> Vec<CreatorNFTExtra> {
+        self.extras.clone()
+    }
+
+    pub fn get_references(&self) -> Vec<CreatorNFTReference> {
+        self.references.clone()
+    }
+
+    pub fn get_token_metadata(&self, nft_rank: UserNFTRank) -> Result<TokenMetadata, MetaDaoError> {
+        let index = match nft_rank {
+            UserNFTRank::Common => 0_usize,
+            UserNFTRank::Uncommon => 1_usize,
+            UserNFTRank::Rare => 2_usize,
+        };
+
+        let title = Some(String::from(self.get_titles()[index].get_title()));
+        let description = Some(String::from(
+            self.get_descriptions()[index].get_description(),
+        ));
+        let media = Some(String::from(self.get_medias()[index].get_media()));
+        let media_hash = env::sha256(media.clone().unwrap().as_bytes());
+        let media_hash = Some(Base64VecU8::from(media_hash));
+        let copies = Some(self.get_copies()[index].get_copies());
+        let issued_at = Some(format!("block_timestamp: {}", env::block_timestamp()));
+        let extra = Some(String::from(self.get_extras()[index].get_extra()));
+        let reference = self.get_references()[index].get_reference();
+        let reference_hash = if reference.is_none() {
+            Some(Base64VecU8::from(env::sha256(
+                reference.clone().unwrap().as_bytes(),
+            )))
+        } else {
+            None
+        };
+
+        let token_metadata = TokenMetadata {
+            title,
+            description,
+            media,
+            media_hash,
+            copies,
+            issued_at,
+            expires_at: None,
+            starts_at: None,
+            updated_at: None,
+            extra,
+            reference,
+            reference_hash,
+        };
+
+        Ok(token_metadata)
     }
 }
 

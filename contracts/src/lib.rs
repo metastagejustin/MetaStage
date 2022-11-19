@@ -1,7 +1,9 @@
+use near_contract_standards::non_fungible_token::metadata::NFTContractMetadata;
+use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{UnorderedMap, UnorderedSet};
+use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
+use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault};
 use near_units::parse_near;
 use registry::CreatorMetadata;
 
@@ -60,22 +62,52 @@ pub struct ObtainedTokenAmounts {
     pub user_id: UserAccountId,
     pub ft_token_id: FTAccountId,
     pub amount: u128,
+    pub nft_rank: UserNFTRank,
+}
+
+/// [`StorageKey`] provides a suitable interface to deal with
+/// the position NFT minting metadata key metadata
+#[derive(BorshSerialize, BorshStorageKey)]
+enum StorageKey {
+    NonFungibleToken,
+    Metadata,
+    TokenMetadata,
+    Enumeration,
+    Approval,
 }
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MetaDaoContract {
+    /// AccountId of admin of contract
     pub admin: AccountId, // TODO: can we do it without an admin ?
+    /// Current epoch of contract
     pub epoch: Epoch,
+    /// Container for each Creator's botained funds, per epoch
     pub creator_funding:
         UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, Vec<ObtainedTokenAmounts>>>,
+    /// Container for each User's funded funds, per epoch
     pub user_funds: UnorderedMap<Epoch, UnorderedMap<UserAccountId, Vec<FundedTokenAmount>>>,
+    /// Container for Creators account ids, per epoch
     pub creators_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
+    /// Container for each Creator NFT metadata, per epoch
     pub creators_metadata: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, CreatorMetadata>>,
+    /// Container for allowed fungible tokens, per epoch, to fund Creators
     pub allowed_fungible_tokens_funding: UnorderedMap<Epoch, UnorderedSet<FTAccountId>>,
+    /// Tracks if epoch is on
     pub is_epoch_on: bool,
+    /// Tracks if contract is in registration period
     pub in_registration: bool,
+    /// Tracks if contract is in funding period
     pub in_funding: bool,
+    /// Tracks if contract is in minting period
+    pub in_minting: bool,
+    /// A Non Fungible Token interface
+    pub tokens: NonFungibleToken,
+    /// A Non Fungible Token interface for Metadata
+    pub metadata: LazyOption<NFTContractMetadata>,
+    /// A unique nft identifier
+    pub nft_id: u32,
 }
 
 #[near_bindgen]
@@ -102,6 +134,27 @@ impl MetaDaoContract {
         let allowed_fungible_tokens_funding =
             UnorderedMap::<Epoch, UnorderedSet<FTAccountId>>::new(b"g".to_vec());
 
+        let tokens = NonFungibleToken::new(
+            StorageKey::NonFungibleToken,
+            admin.clone(),
+            Some(StorageKey::TokenMetadata),
+            Some(StorageKey::Enumeration),
+            Some(StorageKey::Approval),
+        );
+
+        let metadata = LazyOption::new(
+            StorageKey::Metadata,
+            Some(&NFTContractMetadata {
+                spec: "nft-1.0.0".to_string(),
+                name: "MetaDaoContract".to_string(),
+                symbol: "MetaDao".to_string(),
+                icon: None,
+                base_uri: None,
+                reference: None,
+                reference_hash: None,
+            }),
+        );
+
         Self {
             admin,
             epoch: Epoch(0u16),
@@ -110,9 +163,13 @@ impl MetaDaoContract {
             is_epoch_on: false,
             in_registration: false,
             in_funding: false,
+            in_minting: false,
             creators_per_epoch_set,
             creators_metadata,
             allowed_fungible_tokens_funding,
+            tokens,
+            metadata,
+            nft_id: 0u32,
         }
     }
 
@@ -281,6 +338,7 @@ impl MetaDaoContract {
         user_id: UserAccountId,
         creator_account_id: CreatorAccountId,
         nft_rank: UserNFTRank,
+        amount: u128,
         ft_token_id: FTAccountId,
     ) -> Result<(), MetaDaoError> {
         if env::attached_deposit() < parse_near!("0.01 N") {
@@ -298,18 +356,6 @@ impl MetaDaoContract {
         if self.creators_per_epoch_set.get(&self.epoch).is_none() {
             return Err(MetaDaoError::CreatorIsNotRegistered);
         }
-
-        let creators_metadata = self
-            .creators_metadata
-            .get(&self.epoch)
-            .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
-        let creator_metadata = creators_metadata
-            .get(&creator_account_id)
-            .ok_or(MetaDaoError::CreatorIsNotRegistered)?;
-
-        let amount = creator_metadata
-            .nft_rank(nft_rank)
-            .get_amount_from_nft_rank(&ft_token_id)?;
 
         let funded_token_amount = FundedTokenAmount {
             creator_id: creator_account_id.clone(),
@@ -338,6 +384,7 @@ impl MetaDaoContract {
             user_id,
             ft_token_id,
             amount,
+            nft_rank,
         };
 
         let mut creator_fundings = self
@@ -424,6 +471,7 @@ mod test {
         assert!(!contract.is_epoch_on);
         assert!(!contract.in_registration);
         assert!(!contract.in_funding);
+        assert!(!contract.in_minting);
 
         assert_eq!(contract.admin, admin);
         assert!(contract.creator_funding.is_empty());
@@ -433,6 +481,7 @@ mod test {
         assert!(contract.creators_metadata.is_empty());
 
         assert!(contract.allowed_fungible_tokens_funding.is_empty());
+        assert_eq!(contract.nft_id, 0u32);
     }
 
     #[test]
@@ -855,9 +904,10 @@ mod test {
         let creator_account_id = "creator.near".to_string().try_into().unwrap();
         let nft_rank = UserNFTRank::Common;
         let ft_token_id = "wrap.near".to_string().try_into().unwrap();
+        let amount = 100u128;
 
         contract
-            .user_funding_creator(user_id, creator_account_id, nft_rank, ft_token_id)
+            .user_funding_creator(user_id, creator_account_id, nft_rank, amount, ft_token_id)
             .unwrap();
 
         // TODO: continue test
