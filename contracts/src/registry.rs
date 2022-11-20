@@ -156,3 +156,137 @@ impl MetaDaoContract {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{
+        testing_env, AccountId, Gas, MockedBlockchain, PromiseResult, RuntimeFeesConfig, VMConfig,
+        VMContext,
+    };
+    use std::convert::TryInto;
+
+    /// utility function for testing callbacks logic
+    #[allow(dead_code)]
+    pub fn testing_env_with_promise_results(
+        context: VMContext,
+        promise_results: Vec<PromiseResult>,
+    ) {
+        near_sdk::env::set_blockchain_interface(MockedBlockchain::new(
+            context,
+            VMConfig::test(),
+            RuntimeFeesConfig::test(),
+            promise_results,
+            Default::default(),
+            Default::default(),
+            None,
+        ));
+    }
+
+    pub fn to_yocto(value: &str) -> u128 {
+        let vals: Vec<_> = value.split('.').collect();
+        let part1 = vals[0].parse::<u128>().unwrap() * 10u128.pow(24);
+        if vals.len() > 1 {
+            let power = vals[1].len() as u32;
+            let part2 = vals[1].parse::<u128>().unwrap() * 10u128.pow(24 - power);
+            part1 + part2
+        } else {
+            part1
+        }
+    }
+
+    fn get_context_with_storage(storage: u128) -> VMContext {
+        let contract_account_id: AccountId = "conliq.testnet".to_string().try_into().unwrap();
+
+        VMContextBuilder::new()
+            .current_account_id(contract_account_id)
+            .attached_deposit(to_yocto("1000"))
+            .signer_account_id(accounts(0))
+            .predecessor_account_id(accounts(0))
+            .prepaid_gas(Gas(300 * 10u64.pow(16)))
+            .attached_deposit(storage)
+            .build()
+    }
+
+    #[test]
+    fn it_works_registry() {
+        let admin: AccountId = accounts(0);
+        let storage = 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .unwrap();
+
+        contract.is_epoch_on = true;
+
+        contract.set_registration().unwrap();
+
+        let creator_account_id = accounts(0);
+
+        let metadata = CreatorMetadata {
+            nft_ranks: vec![
+                CreatorNFTRanking::Common(HashMap::<FTAccountId, u128>::from_iter([(
+                    "ft_account_id.near".to_string().try_into().unwrap(),
+                    100_u128,
+                )])),
+                CreatorNFTRanking::Uncommon(HashMap::<FTAccountId, u128>::from_iter([(
+                    "ft_account_id.near".to_string().try_into().unwrap(),
+                    250_u128,
+                )])),
+                CreatorNFTRanking::Rare(HashMap::<FTAccountId, u128>::from_iter([(
+                    "ft_account_id.near".to_string().try_into().unwrap(),
+                    500_u128,
+                )])),
+            ],
+            titles: vec![
+                CreatorNFTTitle::Common("common".to_string()),
+                CreatorNFTTitle::Uncommon("uncommon".to_string()),
+                CreatorNFTTitle::Rare("rare".to_string()),
+            ],
+            descriptions: vec![
+                CreatorNFTDescription::Common("common".to_string()),
+                CreatorNFTDescription::Uncommon("uncommon".to_string()),
+                CreatorNFTDescription::Rare("rare".to_string()),
+            ],
+            medias: vec![
+                CreatorNFTMedia::Common("media_common".to_string()),
+                CreatorNFTMedia::Uncommon("media_uncommon".to_string()),
+                CreatorNFTMedia::Rare("media_rare".to_string()),
+            ],
+            copies: vec![
+                CreatorNFTCopies::Common(100_u64),
+                CreatorNFTCopies::Uncommon(50_u64),
+                CreatorNFTCopies::Rare(5_u64),
+            ],
+            extras: vec![
+                CreatorNFTExtra::Common("extra_common".to_string()),
+                CreatorNFTExtra::Uncommon("extra_uncommon".to_string()),
+                CreatorNFTExtra::Rare("extra_rare".to_string()),
+            ],
+            references: vec![
+                CreatorNFTReference::Common(None),
+                CreatorNFTReference::Uncommon(None),
+                CreatorNFTReference::Rare(None),
+            ],
+        };
+
+        contract.creator_registration(metadata).unwrap();
+    }
+}
