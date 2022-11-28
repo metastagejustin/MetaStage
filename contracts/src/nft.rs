@@ -157,13 +157,7 @@ impl CreatorNFTRankings {
     }
 }
 
-pub fn get_metadata(
-    rarity: CreatorNFTRanking,
-    creator_id: AccountId,
-    copies: u64,
-    description: String,
-    title: String,
-) -> TokenMetadata {
+pub fn get_metadata(copies: u64, description: String, title: String) -> TokenMetadata {
     TokenMetadata {
         title: Some(title),
         description: Some(description),
@@ -248,6 +242,7 @@ impl MetaDaoContract {
             ft_token_id,
             amount,
             nft_rank,
+            ..
         } in creator_obtained_funds
         {
             let token_id = self.get_token_id(&user_id, &nft_rank, &creator_metadata);
@@ -268,6 +263,7 @@ impl MetaDaoContract {
 
             self.external_send_ft_tokens(
                 creator_account_id.clone(),
+                &user_id,
                 ft_token_id,
                 creator_amount_to_receive as u128,
             );
