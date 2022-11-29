@@ -61,6 +61,7 @@ pub struct ObtainedTokenAmounts {
     pub ft_token_id: FTAccountId,
     pub amount: u128,
     pub nft_rank: UserNFTRank,
+    pub already_funded: bool,
 }
 
 /// [`StorageKey`] provides a suitable interface to deal with
@@ -392,6 +393,7 @@ impl MetaDaoContract {
             ft_token_id,
             amount,
             nft_rank,
+            already_funded: false,
         };
 
         let mut creator_fundings = self

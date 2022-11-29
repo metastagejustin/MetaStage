@@ -22,4 +22,13 @@ Each tier represents the scarcity of the NFT associated to the project (namely `
 
 The above input data, must be retrieved directly from the Creator, via the platform. 
 
-3. 
+3. User funding. After creators have registered their projects, a new phase begins (in the current epoch). Namely, users are incentivized
+to fund their favorite projects, via the platform. If done via the platform, users are promp to connect their wallets and make a transfer
+call to a fungible contract (e.g., `USDT` or `wNear`). The fungible contract call has to be provided with the following data:
+
+ - A `receiver_id`, in this case the `AccountId` of the `MetaDao` contract;
+ - An `amount`, a `u128` value of the number of tokens the user is willing to provide to the creator. In exchange, it shall receive
+ a NFT, corresponding to the tier in which `amount` fits in. Notice that, if the user funds a value inferior to the least tier, it
+ will not receive a NFT back.
+ - A `msg`, a plain `String` which specifies what is the actual creator project the user is funding and what is the tier to choose.
+
