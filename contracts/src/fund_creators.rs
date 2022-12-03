@@ -1,8 +1,9 @@
 use crate::{consts::GAS_FOR_FT_TRANSFER, *};
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::json_types::U128;
-use near_sdk::Promise;
+use near_sdk::{env, Promise};
 
+#[near_bindgen]
 impl MetaDaoContract {
     #[private]
     pub fn on_external_send_ft_tokens_callback(
@@ -20,16 +21,24 @@ impl MetaDaoContract {
             .ok_or(MetaDaoError::InvalidCurrentEpoch)
             .expect("MetaDaoContract::external_send_ft_tokens::Invalid current epoch id");
 
-        let mut creator_funding = creator_fundings
+        let creator_funding = creator_fundings
             .get(creator_account_id)
             .ok_or(MetaDaoError::CreatorIsNotRegistered)
             .expect("MetaDaoContract::external_send_ft_tokens::Creator is not registered");
 
-        creator_funding
+        let creator_funding = creator_funding
             .iter()
             .map(|ot| {
                 if ot.user_id == *user_id {
-                    ot.already_funded = true;
+                    ObtainedTokenAmounts {
+                        user_id: ot.user_id.clone(),
+                        already_funded: true,
+                        amount: ot.amount,
+                        nft_rank: ot.nft_rank.clone(),
+                        ft_token_id: ot.ft_token_id.clone(),
+                    }
+                } else {
+                    ot.clone()
                 }
             })
             .collect::<Vec<_>>();
@@ -53,7 +62,7 @@ impl MetaDaoContract {
         ext_ft_core::ext(ft_account_id)
             .with_static_gas(GAS_FOR_FT_TRANSFER)
             .with_attached_deposit(1)
-            .ft_transfer(creator_account_id, U128(amount), None)
+            .ft_transfer(creator_account_id.clone(), U128(amount), None)
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_FT_TRANSFER)
