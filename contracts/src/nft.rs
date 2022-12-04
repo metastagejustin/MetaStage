@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::{error::MetaDaoError, FTAccountId, *};
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum UserNFTRank {
     Common,
@@ -19,7 +19,7 @@ pub enum UserNFTRank {
     Rare,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTRanking {
     Common(HashMap<FTAccountId, u128>),
@@ -45,7 +45,7 @@ impl CreatorNFTRanking {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTTitle {
     Common(String),
@@ -61,7 +61,7 @@ impl CreatorNFTTitle {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTDescription {
     Common(String),
@@ -77,7 +77,7 @@ impl CreatorNFTDescription {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTMedia {
     Common(String),
@@ -93,7 +93,7 @@ impl CreatorNFTMedia {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTCopies {
     Common(u64),
@@ -109,7 +109,7 @@ impl CreatorNFTCopies {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTExtra {
     Common(String),
@@ -125,7 +125,7 @@ impl CreatorNFTExtra {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum CreatorNFTReference {
     Common(Option<String>),
@@ -141,7 +141,7 @@ impl CreatorNFTReference {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct CreatorNFTRankings {
     rankings: Vec<CreatorNFTRanking>,
