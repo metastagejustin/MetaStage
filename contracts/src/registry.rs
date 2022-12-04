@@ -13,7 +13,7 @@ use crate::{
     *,
 };
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct CreatorMetadata {
     nft_ranks: Vec<CreatorNFTRanking>,
@@ -211,36 +211,8 @@ mod tests {
             .build()
     }
 
-    #[test]
-    fn it_works_registry() {
-        let admin: AccountId = accounts(0);
-        let storage = 1u128;
-
-        let context = get_context_with_storage(storage);
-        testing_env!(context);
-
-        let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
-
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
-
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
-
-        contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
-            .unwrap();
-
-        contract.is_epoch_on = true;
-
-        contract.set_registration().unwrap();
-
-        let creator_account_id = accounts(0);
-
-        let metadata = CreatorMetadata {
+    fn get_registry_metadata() -> CreatorMetadata {
+        CreatorMetadata {
             nft_ranks: vec![
                 CreatorNFTRanking::Common(HashMap::<FTAccountId, u128>::from_iter([(
                     "ft_account_id.near".to_string().try_into().unwrap(),
@@ -285,8 +257,176 @@ mod tests {
                 CreatorNFTReference::Uncommon(None),
                 CreatorNFTReference::Rare(None),
             ],
-        };
+        }
+    }
 
-        contract.creator_registration(metadata).unwrap();
+    #[test]
+    fn it_works_registry() {
+        let admin: AccountId = accounts(0);
+        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .unwrap();
+
+        contract.is_epoch_on = true;
+
+        contract.set_registration().unwrap();
+
+        let creator_account_id = accounts(0);
+
+        let metadata = get_registry_metadata();
+
+        contract.creator_registration(metadata.clone()).unwrap();
+
+        let creator_funding = contract
+            .creator_funding
+            .get(&contract.epoch)
+            .ok_or(MetaDaoError::EpochIsOff)
+            .unwrap();
+
+        let creators_metadata = contract
+            .creators_metadata
+            .get(&contract.epoch)
+            .ok_or(MetaDaoError::EpochIsOff)
+            .unwrap();
+
+        let creators_per_epoch = contract
+            .creators_per_epoch_set
+            .get(&contract.epoch)
+            .ok_or(MetaDaoError::EpochIsOff)
+            .unwrap();
+
+        assert_eq!(creator_funding.get(&creator_account_id).unwrap(), vec![]);
+        assert_eq!(
+            creators_metadata.get(&creator_account_id).unwrap(),
+            metadata
+        );
+        assert_eq!(creators_per_epoch.len(), 1);
+        assert!(creators_per_epoch.contains(&creator_account_id));
+    }
+
+    #[test]
+    fn it_fails_creator_registry_if_not_enough_funds_for_storage() {
+        let admin: AccountId = accounts(0);
+        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE - 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .unwrap();
+
+        contract.is_epoch_on = true;
+
+        contract.set_registration().unwrap();
+
+        let metadata = get_registry_metadata();
+
+        contract.is_epoch_on = false;
+
+        assert!(contract
+            .creator_registration(metadata.clone())
+            .unwrap_err()
+            .to_string()
+            .contains("Uncovered storage costs"));
+    }
+
+    #[test]
+    fn it_fails_creator_registry_if_epoch_is_on() {
+        let admin: AccountId = accounts(0);
+        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE - 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .unwrap();
+
+        contract.is_epoch_on = true;
+
+        contract.set_registration().unwrap();
+
+        let metadata = get_registry_metadata();
+
+        contract.is_epoch_on = false;
+
+        assert!(contract
+            .creator_registration(metadata.clone())
+            .unwrap_err()
+            .to_string()
+            .contains("Currently, epoch is off"));
+    }
+
+    #[test]
+    fn it_fails_creator_registry_if_not_in_registration() {
+        let admin: AccountId = accounts(0);
+        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE - 1u128;
+
+        let context = get_context_with_storage(storage);
+        testing_env!(context);
+
+        let mut contract = MetaDaoContract::new(admin.clone());
+        let allowed_ft_accounts: Vec<AccountId> = vec![
+            "wrap.near".to_string().try_into().unwrap(),
+            "usn".to_string().try_into().unwrap(),
+        ];
+
+        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+
+        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
+        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+
+        contract
+            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .unwrap();
+
+        contract.is_epoch_on = true;
+
+        let metadata = get_registry_metadata();
+
+        assert!(contract
+            .creator_registration(metadata.clone())
+            .unwrap_err()
+            .to_string()
+            .contains("Not in Registration period"));
     }
 }

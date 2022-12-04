@@ -54,7 +54,7 @@ pub struct FundedTokenAmount {
     pub amount: u128,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, Debug)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ObtainedTokenAmounts {
     pub user_id: UserAccountId,
