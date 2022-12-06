@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use near_contract_standards::non_fungible_token::metadata::NFTContractMetadata;
 use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -102,7 +104,7 @@ pub struct MetaDaoContract {
     /// Tracks if contract is in minting period
     pub in_minting: bool,
     /// MetaDao protocol fee
-    pub protocol_fee: UnorderedMap<Epoch, UnorderedMap<FTAccountId, f64>>,
+    pub protocol_fee: UnorderedMap<Epoch, HashMap<FTAccountId, f64>>,
     /// A Non Fungible Token interface
     pub tokens: NonFungibleToken,
     /// A Non Fungible Token interface for Metadata
@@ -135,8 +137,7 @@ impl MetaDaoContract {
         let allowed_fungible_tokens_funding =
             UnorderedMap::<Epoch, UnorderedSet<FTAccountId>>::new(b"g".to_vec());
 
-        let protocol_fee =
-            UnorderedMap::<Epoch, UnorderedMap<FTAccountId, f64>>::new(b"h".to_vec());
+        let protocol_fee = UnorderedMap::<Epoch, HashMap<FTAccountId, f64>>::new(b"h".to_vec());
 
         let tokens = NonFungibleToken::new(
             StorageKey::NonFungibleToken,
@@ -229,7 +230,7 @@ impl MetaDaoContract {
     fn create_new_epoch(
         &mut self,
         allowed_ft_account_ids: Option<Vec<FTAccountId>>,
-        protocol_fee: UnorderedMap<FTAccountId, f64>,
+        protocol_fee: HashMap<FTAccountId, f64>,
     ) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
@@ -805,10 +806,10 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
@@ -864,10 +865,10 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
@@ -892,10 +893,10 @@ mod test {
 
         contract.is_epoch_on = true;
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
@@ -918,10 +919,10 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
