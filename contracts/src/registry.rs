@@ -274,10 +274,10 @@ mod tests {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
@@ -334,10 +334,10 @@ mod tests {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
@@ -372,10 +372,10 @@ mod tests {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
@@ -410,10 +410,10 @@ mod tests {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = UnorderedMap::<FTAccountId, f64>::new(b"test_protocol_fee".to_vec());
+        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert(&"wrap.near".to_string().try_into().unwrap(), &0.05);
-        protocol_fee.insert(&"usn".to_string().try_into().unwrap(), &0.03);
+        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
             .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)

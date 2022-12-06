@@ -252,14 +252,16 @@ impl MetaDaoContract {
             self.nft_mint(token_id, user_id.clone(), token_metadata);
 
             // get contract fee
-            let protocol_fee = self
+            let protocol_fees = self
                 .protocol_fee
                 .get(&self.epoch)
-                .ok_or(MetaDaoError::InvalidCurrentEpoch)?
+                .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
+
+            let protocol_fee = protocol_fees
                 .get(&ft_token_id)
                 .ok_or(MetaDaoError::InvalidFTTokenId)?;
 
-            let creator_amount_to_receive = (amount as f64) * (1.0 - protocol_fee);
+            let creator_amount_to_receive = (amount as f64) * (1.0 - *protocol_fee);
 
             self.external_send_ft_tokens(
                 creator_account_id.clone(),
