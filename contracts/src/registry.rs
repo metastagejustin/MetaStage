@@ -269,18 +269,14 @@ mod tests {
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap();
 
         contract.is_epoch_on = true;
@@ -329,18 +325,14 @@ mod tests {
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap();
 
         contract.is_epoch_on = true;
@@ -361,24 +353,20 @@ mod tests {
     #[test]
     fn it_fails_creator_registry_if_epoch_is_on() {
         let admin: AccountId = accounts(0);
-        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE - 1u128;
+        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE;
 
         let context = get_context_with_storage(storage);
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap();
 
         contract.is_epoch_on = true;
@@ -399,24 +387,20 @@ mod tests {
     #[test]
     fn it_fails_creator_registry_if_not_in_registration() {
         let admin: AccountId = accounts(0);
-        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE - 1u128;
+        let storage = (CREATOR_REGISTRY_STORAGE_COST as u128) * env::STORAGE_PRICE_PER_BYTE;
 
         let context = get_context_with_storage(storage);
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap();
 
         contract.is_epoch_on = true;

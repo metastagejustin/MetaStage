@@ -93,8 +93,6 @@ pub struct MetaDaoContract {
     pub creators_per_epoch_set: UnorderedMap<Epoch, UnorderedSet<CreatorAccountId>>,
     /// Container for each Creator NFT metadata, per epoch
     pub creators_metadata: UnorderedMap<Epoch, UnorderedMap<CreatorAccountId, CreatorMetadata>>,
-    /// Container for allowed fungible tokens, per epoch, to fund Creators
-    pub allowed_fungible_tokens_funding: UnorderedMap<Epoch, UnorderedSet<FTAccountId>>,
     /// Tracks if epoch is on
     pub is_epoch_on: bool,
     /// Tracks if contract is in registration period
@@ -104,7 +102,7 @@ pub struct MetaDaoContract {
     /// Tracks if contract is in minting period
     pub in_minting: bool,
     /// MetaDao protocol fee
-    pub protocol_fee: UnorderedMap<Epoch, HashMap<FTAccountId, f64>>,
+    pub protocol_allowed_tokens_fees: UnorderedMap<FTAccountId, f64>,
     /// A Non Fungible Token interface
     pub tokens: NonFungibleToken,
     /// A Non Fungible Token interface for Metadata
@@ -134,10 +132,7 @@ impl MetaDaoContract {
             UnorderedMap<CreatorAccountId, CreatorMetadata>,
         >::new(b"h".to_vec());
 
-        let allowed_fungible_tokens_funding =
-            UnorderedMap::<Epoch, UnorderedSet<FTAccountId>>::new(b"g".to_vec());
-
-        let protocol_fee = UnorderedMap::<Epoch, HashMap<FTAccountId, f64>>::new(b"h".to_vec());
+        let protocol_allowed_tokens_fees = UnorderedMap::<FTAccountId, f64>::new(b"g".to_vec());
 
         let tokens = NonFungibleToken::new(
             StorageKey::NonFungibleToken,
@@ -171,8 +166,7 @@ impl MetaDaoContract {
             in_minting: false,
             creators_per_epoch_set,
             creators_metadata,
-            allowed_fungible_tokens_funding,
-            protocol_fee,
+            protocol_allowed_tokens_fees,
             tokens,
             metadata,
             nft_id: 0u32,
@@ -180,7 +174,7 @@ impl MetaDaoContract {
     }
 
     #[handle_result]
-    fn set_funding(&mut self) -> Result<(), MetaDaoError> {
+    pub fn set_funding(&mut self) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
         }
@@ -204,7 +198,7 @@ impl MetaDaoContract {
     }
 
     #[handle_result]
-    fn set_registration(&mut self) -> Result<(), MetaDaoError> {
+    pub fn set_registration(&mut self) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
         }
@@ -227,10 +221,9 @@ impl MetaDaoContract {
     }
 
     #[handle_result]
-    fn create_new_epoch(
+    pub fn create_new_epoch(
         &mut self,
-        allowed_ft_account_ids: Option<Vec<FTAccountId>>,
-        protocol_fee: HashMap<FTAccountId, f64>,
+        protocol_tokens_fees: Option<HashMap<FTAccountId, f64>>,
     ) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
@@ -278,36 +271,19 @@ impl MetaDaoContract {
                     .to_vec(),
             ),
         );
-
-        let mut allowed_ft_acc_ids = UnorderedSet::<FTAccountId>::new(
+        let mut protocol_allowed_tokens_fees = UnorderedMap::<FTAccountId, f64>::new(
             format!("allowed_ft_acc_ids for epoch: {}", self.epoch.count())
                 .as_bytes()
                 .to_vec(),
         );
 
-        if let Some(ft_acc_ids) = allowed_ft_account_ids {
-            for ft_acc_id in &ft_acc_ids {
-                allowed_ft_acc_ids.insert(ft_acc_id);
+        if let Some(ft_acc_ids_fees) = protocol_tokens_fees {
+            for (ft_acc_id, fee) in &ft_acc_ids_fees {
+                protocol_allowed_tokens_fees.insert(&ft_acc_id, &fee);
             }
-        } else {
-            let previous_allowed_ft_acc_ids = self
-                .allowed_fungible_tokens_funding
-                .get(
-                    &self
-                        .epoch
-                        .previous_epoch()
-                        .ok_or(MetaDaoError::InvalidInitializationOfEpoch)?,
-                )
-                .ok_or(MetaDaoError::InvalidCurrentEpoch)?;
 
-            for ft_acc_id in previous_allowed_ft_acc_ids.iter() {
-                allowed_ft_acc_ids.insert(&ft_acc_id);
-            }
+            self.protocol_allowed_tokens_fees = protocol_allowed_tokens_fees;
         }
-        self.allowed_fungible_tokens_funding
-            .insert(&self.epoch, &allowed_ft_acc_ids);
-
-        self.protocol_fee.insert(&self.epoch, &protocol_fee);
 
         self.is_epoch_on = true;
 
@@ -315,7 +291,7 @@ impl MetaDaoContract {
     }
 
     #[handle_result]
-    fn end_epoch(&mut self) -> Result<(), MetaDaoError> {
+    pub fn end_epoch(&mut self) -> Result<(), MetaDaoError> {
         if env::predecessor_account_id() != self.admin {
             return Err(MetaDaoError::InvalidAdminCall);
         }
@@ -342,7 +318,7 @@ impl MetaDaoContract {
     #[payable]
     #[private]
     #[handle_result]
-    fn user_funding_creator(
+    pub fn user_funding_creator(
         &mut self,
         user_id: UserAccountId,
         creator_account_id: CreatorAccountId,
@@ -490,7 +466,7 @@ mod test {
         assert!(contract.creators_per_epoch_set.is_empty());
         assert!(contract.creators_metadata.is_empty());
 
-        assert!(contract.allowed_fungible_tokens_funding.is_empty());
+        assert!(contract.protocol_allowed_tokens_fees.is_empty());
         assert_eq!(contract.nft_id, 0u32);
     }
 
@@ -806,14 +782,12 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut ft_acc_ids_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        ft_acc_ids_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        ft_acc_ids_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
-        contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
-            .unwrap();
+        contract.create_new_epoch(Some(ft_acc_ids_fees)).unwrap();
 
         assert_eq!(contract.epoch, Epoch(1u16));
         assert!(contract.is_epoch_on);
@@ -831,24 +805,21 @@ mod test {
             .get(&epoch)
             .unwrap()
             .is_empty());
+        assert_eq!(contract.protocol_allowed_tokens_fees.len(), 2u64);
         assert_eq!(
             contract
-                .allowed_fungible_tokens_funding
-                .get(&epoch)
-                .unwrap()
-                .len(),
-            2u64
+                .protocol_allowed_tokens_fees
+                .get(&AccountId::try_from(String::from("wrap.near")).unwrap())
+                .unwrap(),
+            0.05_f64
         );
-        assert!(contract
-            .allowed_fungible_tokens_funding
-            .get(&epoch)
-            .unwrap()
-            .contains(&AccountId::try_from(String::from("wrap.near")).unwrap()));
-        assert!(contract
-            .allowed_fungible_tokens_funding
-            .get(&epoch)
-            .unwrap()
-            .contains(&AccountId::try_from(String::from("usn")).unwrap()));
+        assert_eq!(
+            contract
+                .protocol_allowed_tokens_fees
+                .get(&AccountId::try_from(String::from("usn")).unwrap())
+                .unwrap(),
+            0.03_f64
+        );
     }
 
     #[test]
@@ -865,13 +836,13 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap_err()
             .to_string()
             .contains("Invalid Admin call");
@@ -893,13 +864,13 @@ mod test {
 
         contract.is_epoch_on = true;
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap_err()
             .to_string()
             .contains("Unable to create a new epoch, while previous epoch is still ongoing");
@@ -919,13 +890,13 @@ mod test {
             "usn".to_string().try_into().unwrap(),
         ];
 
-        let mut protocol_fee = HashMap::<FTAccountId, f64>::new();
+        let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
-        protocol_fee.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
-        protocol_fee.insert("usn".to_string().try_into().unwrap(), 0.03);
+        protocol_accounts_fees.insert("wrap.near".to_string().try_into().unwrap(), 0.05);
+        protocol_accounts_fees.insert("usn".to_string().try_into().unwrap(), 0.03);
 
         contract
-            .create_new_epoch(Some(allowed_ft_accounts), protocol_fee)
+            .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap();
 
         contract.in_funding = true;
