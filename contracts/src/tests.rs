@@ -7,7 +7,71 @@
 // use near_units::{parse_gas, parse_near};
 // use workspaces::{network::Sandbox, Account, AccountId, Contract, Worker};
 
-// use crate::*;
+// use near_primitives::borsh::de;
+
+use crate::{
+    nft::{
+        CreatorNFTCopies, CreatorNFTDescription, CreatorNFTExtra, CreatorNFTMedia,
+        CreatorNFTRanking, CreatorNFTReference, CreatorNFTTitle,
+    },
+    *,
+};
+
+pub fn get_registry_metadata() -> CreatorMetadata {
+    let nft_ranks = vec![
+        CreatorNFTRanking::Common(HashMap::<FTAccountId, u128>::from_iter([
+            ("wrap.near".to_string().try_into().unwrap(), 100_u128),
+            ("usn".to_string().try_into().unwrap(), 1_000_u128),
+        ])),
+        CreatorNFTRanking::Uncommon(HashMap::<FTAccountId, u128>::from_iter([
+            ("wrap.near".to_string().try_into().unwrap(), 250_u128),
+            ("usn".to_string().try_into().unwrap(), 2_500_u128),
+        ])),
+        CreatorNFTRanking::Rare(HashMap::<FTAccountId, u128>::from_iter([
+            ("wrap.near".to_string().try_into().unwrap(), 500_u128),
+            ("usn".to_string().try_into().unwrap(), 5_000_u128),
+        ])),
+    ];
+    let titles = vec![
+        CreatorNFTTitle::Common("common".to_string()),
+        CreatorNFTTitle::Uncommon("uncommon".to_string()),
+        CreatorNFTTitle::Rare("rare".to_string()),
+    ];
+    let descriptions = vec![
+        CreatorNFTDescription::Common("common".to_string()),
+        CreatorNFTDescription::Uncommon("uncommon".to_string()),
+        CreatorNFTDescription::Rare("rare".to_string()),
+    ];
+    let medias = vec![
+        CreatorNFTMedia::Common("media_common".to_string()),
+        CreatorNFTMedia::Uncommon("media_uncommon".to_string()),
+        CreatorNFTMedia::Rare("media_rare".to_string()),
+    ];
+    let copies = vec![
+        CreatorNFTCopies::Common(100_u64),
+        CreatorNFTCopies::Uncommon(50_u64),
+        CreatorNFTCopies::Rare(5_u64),
+    ];
+    let extras = vec![
+        CreatorNFTExtra::Common("extra_common".to_string()),
+        CreatorNFTExtra::Uncommon("extra_uncommon".to_string()),
+        CreatorNFTExtra::Rare("extra_rare".to_string()),
+    ];
+    let references = vec![
+        CreatorNFTReference::Common(None),
+        CreatorNFTReference::Uncommon(None),
+        CreatorNFTReference::Rare(None),
+    ];
+    CreatorMetadata::new(
+        nft_ranks,
+        titles,
+        descriptions,
+        medias,
+        copies,
+        extras,
+        references,
+    )
+}
 
 // pub async fn init() -> anyhow::Result<(
 //     Contract,
