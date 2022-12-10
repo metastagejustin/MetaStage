@@ -26,6 +26,26 @@ pub struct CreatorMetadata {
 }
 
 impl CreatorMetadata {
+    pub fn new(
+        nft_ranks: Vec<CreatorNFTRanking>,
+        titles: Vec<CreatorNFTTitle>,
+        descriptions: Vec<CreatorNFTDescription>,
+        medias: Vec<CreatorNFTMedia>,
+        copies: Vec<CreatorNFTCopies>,
+        extras: Vec<CreatorNFTExtra>,
+        references: Vec<CreatorNFTReference>,
+    ) -> Self {
+        Self {
+            nft_ranks,
+            titles,
+            descriptions,
+            medias,
+            copies,
+            extras,
+            references,
+        }
+    }
+
     pub fn nft_rank(&self, user_nft_rank: UserNFTRank) -> CreatorNFTRanking {
         match user_nft_rank {
             UserNFTRank::Common => self.nft_ranks[0].clone(),

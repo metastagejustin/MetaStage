@@ -777,10 +777,6 @@ mod test {
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
         let mut ft_acc_ids_fees = HashMap::<FTAccountId, f64>::new();
 
@@ -831,10 +827,6 @@ mod test {
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
         let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
@@ -857,10 +849,6 @@ mod test {
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
         contract.is_epoch_on = true;
 
@@ -879,16 +867,12 @@ mod test {
     #[test]
     fn test_user_funding_creator_works() {
         let admin: AccountId = accounts(1);
-        let storage = parse_near!("0.01 N");
+        let storage = parse_near!("0.1 N");
 
         let context = get_context_with_storage(storage);
         testing_env!(context);
 
         let mut contract = MetaDaoContract::new(admin.clone());
-        let allowed_ft_accounts: Vec<AccountId> = vec![
-            "wrap.near".to_string().try_into().unwrap(),
-            "usn".to_string().try_into().unwrap(),
-        ];
 
         let mut protocol_accounts_fees = HashMap::<FTAccountId, f64>::new();
 
@@ -899,18 +883,107 @@ mod test {
             .create_new_epoch(Some(protocol_accounts_fees))
             .unwrap();
 
-        contract.in_funding = true;
+        contract.set_registration().unwrap();
 
         let user_id: AccountId = "user.near".to_string().try_into().unwrap();
-        let creator_account_id = "creator.near".to_string().try_into().unwrap();
+        let creator_account_id = accounts(1);
         let nft_rank = UserNFTRank::Common;
-        let ft_token_id = "wrap.near".to_string().try_into().unwrap();
-        let amount = 100u128;
+        let ft_token_id: AccountId = "wrap.near".to_string().try_into().unwrap();
+        let amount = 100_u128;
+
+        use crate::tests::get_registry_metadata;
+
+        let metadata = get_registry_metadata();
+
+        contract.creator_registration(metadata).unwrap();
+
+        contract.set_funding().unwrap();
 
         contract
-            .user_funding_creator(user_id, creator_account_id, nft_rank, amount, ft_token_id)
+            .user_funding_creator(
+                user_id.clone(),
+                creator_account_id.clone(),
+                nft_rank,
+                amount,
+                ft_token_id.clone(),
+            )
             .unwrap();
 
-        // TODO: continue test
+        let creator_fundings = contract.creator_funding.get(&contract.epoch).unwrap();
+        let creator_funding = creator_fundings.get(&creator_account_id).unwrap();
+
+        assert_eq!(creator_funding.len(), 1_usize);
+        assert_eq!(
+            creator_funding[0],
+            ObtainedTokenAmounts {
+                user_id,
+                amount,
+                already_funded: false,
+                nft_rank: UserNFTRank::Common,
+                ft_token_id
+            }
+        );
+
+        let user_id: AccountId = "other_user.near".to_string().try_into().unwrap();
+        let creator_account_id = accounts(1);
+        let nft_rank = UserNFTRank::Uncommon;
+        let ft_token_id: AccountId = "wrap.near".to_string().try_into().unwrap();
+        let amount = 250_u128;
+
+        contract
+            .user_funding_creator(
+                user_id.clone(),
+                creator_account_id.clone(),
+                nft_rank,
+                amount,
+                ft_token_id.clone(),
+            )
+            .unwrap();
+
+        let creator_fundings = contract.creator_funding.get(&contract.epoch).unwrap();
+        let creator_funding = creator_fundings.get(&creator_account_id).unwrap();
+
+        assert_eq!(creator_funding.len(), 2_usize);
+        assert_eq!(
+            creator_funding[1],
+            ObtainedTokenAmounts {
+                user_id,
+                amount,
+                already_funded: false,
+                nft_rank: UserNFTRank::Uncommon,
+                ft_token_id
+            }
+        );
+
+        let user_id: AccountId = "encore_user.near".to_string().try_into().unwrap();
+        let creator_account_id = accounts(1);
+        let nft_rank = UserNFTRank::Rare;
+        let ft_token_id: AccountId = "wrap.near".to_string().try_into().unwrap();
+        let amount = 500_u128;
+
+        contract
+            .user_funding_creator(
+                user_id.clone(),
+                creator_account_id.clone(),
+                nft_rank,
+                amount,
+                ft_token_id.clone(),
+            )
+            .unwrap();
+
+        let creator_fundings = contract.creator_funding.get(&contract.epoch).unwrap();
+        let creator_funding = creator_fundings.get(&creator_account_id).unwrap();
+
+        assert_eq!(creator_funding.len(), 3_usize);
+        assert_eq!(
+            creator_funding[2],
+            ObtainedTokenAmounts {
+                user_id,
+                amount,
+                already_funded: false,
+                nft_rank: UserNFTRank::Rare,
+                ft_token_id
+            }
+        );
     }
 }
