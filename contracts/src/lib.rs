@@ -35,10 +35,12 @@ impl Epoch {
         self.0
     }
 
+    #[allow(dead_code)]
     fn next_epoch(&self) -> Epoch {
         Self(self.0 + 1)
     }
 
+    #[allow(dead_code)]
     fn previous_epoch(&self) -> Option<Epoch> {
         self.0.checked_sub(1).map(Epoch)
     }
