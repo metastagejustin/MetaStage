@@ -14,7 +14,7 @@ impl MetaDaoContract {
         if let Some(funds) = creator_funds_map.get(&creator_id) {
             Ok(funds.iter().rfold(0u128, |a, b| a + b.amount))
         } else {
-            Ok(0u128)
+            env::panic_str("creator accound id is not registered");
         }
     }
 
