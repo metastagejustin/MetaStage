@@ -286,4 +286,9 @@ near_contract_standards::impl_non_fungible_token_core!(MetaDaoContract, tokens);
 near_contract_standards::impl_non_fungible_token_enumeration!(MetaDaoContract, tokens);
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mint_nfts_for_users_works() {}
+}
